@@ -1,5 +1,11 @@
 # 경북대학교 캠퍼스 내비게이션
 
+서비스 기획 기준은 크누패스(KNU-Pass) 예선신청서입니다. 요구사항과 현재 구현 차이는 [서비스 요구사항](docs/product-spec.md), 수정 순서와 확인 기준은 [구현 계획](docs/implementation-plan.md)에 정리했습니다.
+
+배포 사이트: https://sseungmiii.github.io/knu-campus-navigation/
+
+GitHub Pages는 main 브랜치의 루트를 배포하도록 설정했습니다. main에 반영된 변경은 Pages 빌드 완료 후 사이트에 적용됩니다.
+
 Leaflet 기반 캠퍼스 지도와 지름길 안내 시제품입니다. 경로 재생, 지도/위성 전환, 출발시간 역산, 식당·카페 정보 모달을 제공합니다.
 
 ## 개발 실행
