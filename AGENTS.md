@@ -1,0 +1,8 @@
+# Development guide
+
+- This repository is a plain HTML/CSS/JavaScript app. Preserve the existing UI unless a change is requested.
+- Entry page: index.html. Styles: src/styles.css. Campus nodes, routes and sample POIs: src/campus-data.js. Browser interactions: src/app.js. Pure route functions: src/route-utils.js.
+- Scripts are loaded in order as classic browser scripts. openPoiModal must remain accessible to marker click handlers.
+- Run npm run check and npm test before publishing changes. Use npm run dev for local browser checks.
+- Menu and congestion values are demo data. Do not label them as live without implementing a data source.
+- Preserve Leaflet/OpenStreetMap/Esri attribution and avoid introducing credentials into browser files.

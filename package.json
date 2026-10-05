@@ -1,0 +1,13 @@
+{
+  "name": "knu-campus-navigation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "경북대학교 캠퍼스 지도와 지름길 내비게이션 시제품",
+  "scripts": {
+    "dev": "node scripts/dev-server.cjs",
+    "preview": "node scripts/dev-server.cjs --port=4173",
+    "check": "node scripts/check.cjs",
+    "test": "node tests/route-utils.test.cjs"
+  },
+  "engines": { "node": ">=18" }
+}
