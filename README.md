@@ -33,7 +33,11 @@ Node.js 18 이상, 의존성 설치 없이 실행합니다.
 
 ## 배포와 다음 단계
 
-현재 공개 주소는 https://sseungmiii.github.io/knu-campus-navigation/ 입니다. GitHub Pages는 정적 파일만 실행하므로 REST 백엔드를 직접 실행할 수 없습니다. 이번 작업은 사용자의 선택에 따라 로컬에서 완성합니다. 공개 서비스로 올릴 때는 별도의 HTTPS 서버를 마련하고 키를 그 서버 환경변수로 설정한 뒤 src/map-config.js의 ROUTING_API_BASE_URL을 연결해야 합니다. .env와 키를 GitHub에 올리지 않습니다.
+공개 주소는 https://knu-campus-navigation.vercel.app/ 입니다. Vercel 프로젝트를 이 저장소의 main에 연결하고 Production 환경변수 `KAKAO_REST_API_KEY`를 등록합니다. 카카오 JavaScript SDK 도메인에도 이 주소를 등록합니다. 환경변수 변경 후에는 재배포가 필요합니다.
+
+`vercel.json`이 `npm run build`와 공개 출력 `dist`를 지정합니다. `api/route.js`, `api/search.js`는 서버 함수이며 REST 키는 서버 환경변수에서만 읽습니다. 빌드는 index.html·src·data만 복사하므로 .env·server·tests를 정적 파일로 공개하지 않습니다. API는 같은 Vercel 주소와 기존 https://sseungmiii.github.io/knu-campus-navigation/ 에서 이용할 수 있습니다. CORS는 두 출처만 허용합니다. 요청 제한은 함수 인스턴스별 임시 제한이며 분산된 전역 제한은 아닙니다.
+
+JavaScript 키의 환경변수 관리는 이번 작업에 포함하지 않았습니다. 이 키는 브라우저에서 필요한 공개 키이며 SDK 도메인 제한을 유지합니다. REST 키는 공개 접두사나 브라우저 코드에 넣지 않습니다.
 
 시간표 등록과 오늘 수업 자동 선택은 다음 단계이며 아직 구현하지 않았습니다. 요구사항은 docs/product-spec.md에 있습니다.
 

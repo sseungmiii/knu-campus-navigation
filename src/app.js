@@ -6,7 +6,7 @@ const searchGenerations = {start: 0, end: 0};
 const $ = id => document.getElementById(id);
 const apiBase = ROUTING_API_BASE_URL.replace(/\/$/, '');
 const localBackend = ['127.0.0.1', 'localhost'].includes(location.hostname);
-const hasBackend = Boolean(apiBase) || localBackend;
+const hasBackend = Boolean(apiBase) || localBackend || location.hostname === 'knu-campus-navigation.vercel.app';
 function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); }
 function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`; }
 function updateReady() { $('findRoute').disabled = !map || !places.start || !places.end; }

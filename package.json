@@ -4,6 +4,7 @@
   "private": true,
   "description": "경북대학교 캠퍼스 지도와 지름길 내비게이션 시제품",
   "scripts": {
+    "build": "node scripts/build.cjs",
     "dev": "node scripts/dev-server.cjs",
     "preview": "node scripts/dev-server.cjs --port=4173",
     "check": "node scripts/check.cjs",

@@ -11,4 +11,4 @@
 
 - Current live feature modules: src/app.js, src/geo-utils.js, src/pacemaker.js, server/routing.cjs. Legacy campus demo scripts are not loaded. Preserve Kakao as the provider unless the user requests a change.
 - REST key lives only in ignored .env/server environment. Static serving must exclude server and hidden files. Do not log location or upstream credentials.
-- Current requested scope is local implementation first. GitHub Pages needs a separately deployed HTTPS API; do not publish an unusable replacement to main before it is configured.
+- Public hosting is now authorized on knu-campus-navigation.vercel.app. api/*.js wraps server/routing.cjs; npm run build copies only public assets into dist. Keep .env out of Git and static output. GitHub Pages calls the same Vercel API with restricted CORS.
