@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {createClient} from '../../../lib/supabase/server';
 import timetable from '../../../lib/timetable.cjs';
+import requestOrigin from '../../../lib/request-origin.cjs';
 const fields = 'id,title,term,weekday,start_minute,end_minute,place_name,latitude,longitude,starts_on,ends_on';
 const json = (data, status = 200) => NextResponse.json(data, {status, headers: {'Cache-Control': 'private, no-store'}});
 async function authorized() {
@@ -14,17 +15,13 @@ async function authorized() {
   if (allowed.data !== true) return {response: json({error: '이 계정은 시간표 이용 권한이 없습니다.'}, 403)};
   return {supabase, user: data.user};
 }
-function sameOrigin(request) {
-  const origin = request.headers.get('origin');
-  return origin === new URL(request.url).origin;
-}
 export async function GET() {
   const auth = await authorized(); if (auth.response) return auth.response;
   const {data, error} = await auth.supabase.from('timetable_classes').select(fields).eq('owner_id', auth.user.id).order('weekday').order('start_minute');
   return error ? json({error: '시간표를 불러오지 못했습니다.'}, 503) : json({classes: data});
 }
 async function write(request, method) {
-  if (!sameOrigin(request)) return json({error: '허용되지 않은 요청입니다.'}, 403);
+  if (!requestOrigin.sameOrigin(request)) return json({error: '허용되지 않은 요청입니다.'}, 403);
   if (!/^application\/json(?:;|$)/i.test(request.headers.get('content-type') || '')) return json({error: 'JSON 요청이 필요합니다.'}, 415);
   const auth = await authorized(); if (auth.response) return auth.response;
   let input;

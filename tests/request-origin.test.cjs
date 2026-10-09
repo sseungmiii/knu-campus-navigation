@@ -1,0 +1,12 @@
+const assert = require('node:assert/strict');
+const {sameOrigin} = require('../lib/request-origin.cjs');
+const request = (origin, host, url = 'http://localhost:5174/api/timetable', extra = {}) => ({url, headers: new Headers({...extra, ...(origin ? {origin} : {}), ...(host ? {host} : {})})});
+assert.equal(sameOrigin(request('http://127.0.0.1:5174', '127.0.0.1:5174')), true);
+assert.equal(sameOrigin(request('http://localhost:5174', 'localhost:5174')), true);
+assert.equal(sameOrigin(request('https://knu-campus-navigation.vercel.app', 'knu-campus-navigation.vercel.app', 'https://internal/api/timetable')), true);
+assert.equal(sameOrigin(request('https://evil.example', '127.0.0.1:5174', undefined, {'x-forwarded-host': 'evil.example'})), false);
+assert.equal(sameOrigin(request('http://127.0.0.1:5173', '127.0.0.1:5174')), false);
+assert.equal(sameOrigin(request('https://127.0.0.1:5174', '127.0.0.1:5174')), false);
+assert.equal(sameOrigin(request(null, '127.0.0.1:5174')), false);
+assert.equal(sameOrigin(request('null', '127.0.0.1:5174')), false);
+console.log('request origin tests passed');
