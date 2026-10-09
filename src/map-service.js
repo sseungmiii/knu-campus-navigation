@@ -23,6 +23,18 @@ function createKakaoMap() {
   const native = new kakao.maps.Map(document.getElementById('map'), {center: coord([35.8868, 128.6118]), level: 3});
   native.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
   document.getElementById('mapProviderStatus').textContent = '카카오지도 연결됨';
+  let fittedPath = null;
+  function fit(points) {
+    const bounds = new kakao.maps.LatLngBounds();
+    points.forEach(point => bounds.extend(coord(point)));
+    native.setBounds(bounds, 55, 45, 65, 45);
+  }
+  new ResizeObserver(() => {
+    const center = native.getCenter();
+    native.relayout();
+    if (fittedPath) fit(fittedPath);
+    else native.setCenter(center);
+  }).observe(document.getElementById('map'));
   function layer(object) {
     object.setMap(native);
     return {addTo: () => object.setMap(native), remove: () => object.setMap(null), setLatLng: point => object.setPosition(coord(point))};
@@ -36,9 +48,8 @@ function createKakaoMap() {
     polyline: (points, options) => layer(new kakao.maps.Polyline({path: points.map(coord), strokeColor: options.color, strokeWeight: options.weight, strokeOpacity: options.opacity, strokeStyle: options.dashArray ? 'dash' : 'solid'})),
     marker: (point, html) => layer(new kakao.maps.CustomOverlay({position: coord(point), content: html, xAnchor: 0, yAnchor: 0, zIndex: 5})),
     fitPath: points => {
-      const bounds = new kakao.maps.LatLngBounds();
-      points.forEach(point => bounds.extend(coord(point)));
-      native.setBounds(bounds, 70, 70, 260, 70);
+      fittedPath = points;
+      fit(points);
     },
     search: keyword => new Promise((resolve, reject) => {
       new kakao.maps.services.Places().keywordSearch(keyword, (places, status) => {
@@ -57,6 +68,11 @@ function createLeafletMap() {
   const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(native);
   const skyTiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, attribution: 'Tiles © Esri'});
   const wrap = object => ({addTo: () => object.addTo(native), remove: () => object.remove(), setLatLng: point => object.setLatLng(point)});
+  let fittedPath = null;
+  new ResizeObserver(() => {
+    native.invalidateSize();
+    if (fittedPath) native.fitBounds(fittedPath, {padding: [45, 55]});
+  }).observe(document.getElementById('map'));
   return {
     provider: 'leaflet', panTo: point => native.panTo(point),
     setType: sky => { native.removeLayer(sky ? tiles : skyTiles); (sky ? skyTiles : tiles).addTo(native); },
@@ -64,7 +80,7 @@ function createLeafletMap() {
     polygon: (points, options) => wrap(L.polygon(points, options).addTo(native)),
     polyline: (points, options) => wrap(L.polyline(points, options).addTo(native)),
     marker: (point, html) => wrap(L.marker(point, {icon: L.divIcon({html, className: 'campus-marker', iconSize: [0, 0]})}).addTo(native)),
-    fitPath: points => native.fitBounds(points, {paddingTopLeft: [70, 70], paddingBottomRight: [70, 260]}),
+    fitPath: points => { fittedPath = points; native.fitBounds(points, {padding: [45, 55]}); },
     search: () => Promise.reject(new Error('카카오 연결을 확인한 뒤 장소 검색을 이용해주세요.'))
   };
 }

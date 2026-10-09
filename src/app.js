@@ -1,368 +1,145 @@
-let map = null;
-let campusPolygon = null;
-
-async function initMap() {
-  map = await createCampusMap();
-
-  // 캠퍼스 경계 시연 좌표
-  campusPolygon = map.polygon(CAMPUS_BOUNDARY, {
-    color: '#C8102E',
-    weight: 2.5,
-    dashArray: '5, 5',
-    fillColor: '#C8102E',
-    fillOpacity: 0.08
-  });
-
-  // 외곽 우회로 (점선)
-  map.polyline(DETOUR_PATH, {
-    color: '#64748b',
-    weight: 4,
-    dashArray: '8, 8',
-    opacity: 0.7
-  });
-
-  // 이동 경로 글로우 라인
-  map.polyline(SHORTCUT_PATH, {
-    color: '#ff8599',
-    weight: 10,
-    opacity: 0.5
-  });
-
-  // 이동 경로 메인 라인
-  map.polyline(SHORTCUT_PATH, {
-    color: '#C8102E',
-    weight: 5,
-    opacity: 0.95
-  });
-
-  // 커스텀 노드 오버레이
-  function addCustomNode(lat, lng, emoji, label, badge, bgClass) {
-    const icon = ({
-      className: 'custom-div-icon',
-      html: `
-        <div class="cursor-pointer group flex flex-col items-center -translate-x-1/2 -translate-y-full">
-          <div class="flex items-center space-x-1 bg-white/95 px-2 py-0.5 rounded-full shadow-md border border-gray-200 text-[10px] font-bold text-gray-800 whitespace-nowrap mb-1">
-            <span>${label}</span>
-            <span class="px-1 py-0.2 rounded bg-red-100 text-knu-red font-mono">${badge}</span>
-          </div>
-          <div class="w-8 h-8 rounded-2xl ${bgClass} text-white flex items-center justify-center text-sm shadow-lg ring-2 ring-white transform group-hover:scale-110 transition">
-            ${emoji}
-          </div>
-        </div>
-      `,
-      iconSize: [0, 0]
-    });
-    map.marker([lat, lng], icon.html);
-  }
-
-  addCustomNode(NODES.MAIN_GATE_BUS_STOP[0], NODES.MAIN_GATE_BUS_STOP[1], '🚏', '정문 건너 버스정류장', '출발', 'bg-blue-600');
-  addCustomNode(NODES.IT1_1F[0], NODES.IT1_1F[1], '🚪', 'IT 1호관 1층 정문', '1F', 'bg-knu-red');
-  addCustomNode(NODES.BRIDGE_3F[0], NODES.BRIDGE_3F[1], '🌉', '3층 연결 구름다리', '3F', 'bg-indigo-600');
-  addCustomNode(NODES.CONV_2F[0], NODES.CONV_2F[1], '🎯', '융복합관 2층', '2F', 'bg-emerald-600');
-
-  initPoiMarkers();
-  initPacemakerMarker();
+let map, pacemaker;
+const places = {start: null, end: null};
+let selectedRoute = null, routeController = null, routeGeneration = 0, positionGeneration = 0;
+const layers = [];
+const searchGenerations = {start: 0, end: 0};
+const $ = id => document.getElementById(id);
+const apiBase = ROUTING_API_BASE_URL.replace(/\/$/, '');
+const localBackend = ['127.0.0.1', 'localhost'].includes(location.hostname);
+const hasBackend = Boolean(apiBase) || localBackend;
+function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); }
+function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`; }
+function updateReady() { $('findRoute').disabled = !map || !places.start || !places.end; }
+function clearRoute() {
+  routeGeneration++; routeController?.abort(); routeController = null;
+  pacemaker?.stop(); selectedRoute = null; layers.splice(0).forEach(layer => layer.remove());
+  $('routeSummary').hidden = $('pacePanel').hidden = true; $('mapEmptyHint').hidden = false;
+  $('paceProgress').value = 0; $('paceRemaining').textContent = $('paceTime').textContent = '—';
+  $('findRoute').textContent = '도보 경로 찾기'; updateReady();
 }
-
-function initPoiMarkers() {
-  POI_LIST.forEach(poi => {
-    const icon = ({
-      className: 'poi-div-icon',
-      html: `
-        <div class="cursor-pointer flex flex-col items-center group -translate-x-1/2 -translate-y-1/2" onclick="openPoiModal('${poi.id}')">
-          <div class="w-7 h-7 rounded-full bg-white shadow-md border-2 border-amber-500 flex items-center justify-center text-xs transform group-hover:scale-110 transition">
-            ${poi.icon}
-          </div>
-          <div class="bg-amber-600 text-white text-[8px] font-bold px-1 rounded-full mt-0.5 shadow-sm whitespace-nowrap">
-            ${poi.category}
-          </div>
-        </div>
-      `,
-      iconSize: [0, 0]
-    });
-    map.marker(poi.coords, icon.html);
-  });
+function selectPlace(kind, place) {
+  if (kind === 'start') positionGeneration++;
+  clearRoute(); places[kind] = place; $(`${kind}Query`).value = place.name;
+  $(`${kind}Results`).replaceChildren(); searchGenerations[kind]++;
+  message(places.start && places.end ? '장소가 선택되었습니다. 도보 경로를 찾아보세요.' : '다른 장소도 검색 결과에서 선택해주세요.');
+  updateReady();
 }
-
-function openPoiModal(poiId) {
-  const poi = POI_LIST.find(p => p.id === poiId);
-  if (!poi) return;
-
-  document.getElementById('poiIcon').textContent = poi.icon;
-  document.getElementById('poiTitle').textContent = poi.name;
-  document.getElementById('poiSubtitle').textContent = `동선 인접 POI • ${poi.category}`;
-  
-  document.getElementById('poiContent').innerHTML = `
-    <div class="bg-amber-50/80 p-3 rounded-xl border border-amber-200">
-      <div class="text-[11px] font-bold text-amber-800 mb-1">
-        <i class="fa-solid fa-bell mr-1"></i>${poi.id === 'cafeteria' ? '오늘의 대표 학식 메뉴' : '인기 추천 메뉴'}
-      </div>
-      <div class="text-sm font-black text-gray-900">${poi.menuToday}</div>
-      <div class="flex items-center justify-between mt-2 pt-2 border-t border-amber-200/60 text-xs">
-        <span class="font-bold text-knu-red">${poi.price}</span>
-        <span class="text-emerald-700 font-bold">${poi.congestion}</span>
-      </div>
-    </div>
-    <div class="bg-gray-50 p-2.5 rounded-lg border border-gray-100 text-xs text-gray-600">
-      <div><strong>운영시간:</strong> ${poi.hours}</div>
-      <div class="mt-1">${poi.desc}</div>
-    </div>
-  `;
-  document.getElementById('poiModal').classList.remove('hidden');
-}
-
-document.getElementById('closePoiModal').onclick = () => document.getElementById('poiModal').classList.add('hidden');
-document.getElementById('poiConfirmBtn').onclick = () => document.getElementById('poiModal').classList.add('hidden');
-
-const CAMPUS_SHORTCUT_MINUTES = 7;
-
-function calculateDeadline() {
-  const classTimeStr = document.getElementById('classTimeSelect').value;
-  const originSelect = document.getElementById('originSelect');
-  const transitMinutes = parseInt(originSelect.value, 10);
-
-  const [cHour, cMin] = classTimeStr.split(':').map(Number);
-  const totalClassMin = cHour * 60 + cMin;
-
-  const totalTravelTime = transitMinutes + CAMPUS_SHORTCUT_MINUTES;
-  const departureTotalMin = totalClassMin - totalTravelTime;
-
-  const depHour = Math.floor(departureTotalMin / 60);
-  const depMin = departureTotalMin % 60;
-  const formattedDepTime = `${String(depHour).padStart(2, '0')}:${String(depMin).padStart(2, '0')}`;
-
-  document.getElementById('deadlineTimeText').textContent = `${formattedDepTime} 출발 필수!`;
-  document.getElementById('transitChip').textContent = `대중교통 ${transitMinutes}분 (정문건너 하차)`;
-  document.getElementById('totalDurationChip').textContent = `총 ${totalTravelTime}분 소요`;
-
-  const card = document.getElementById('deadlineCard');
-  card.classList.add('ring-4', 'ring-yellow-300', 'scale-[1.02]');
-  setTimeout(() => {
-    card.classList.remove('ring-4', 'ring-yellow-300', 'scale-[1.02]');
-  }, 500);
-}
-
-document.getElementById('calcBtn').onclick = calculateDeadline;
-document.getElementById('classTimeSelect').onchange = calculateDeadline;
-document.getElementById('originSelect').onchange = calculateDeadline;
-
-let ghostMarker = null;
-
-function initPacemakerMarker() {
-  const icon = ({
-    className: 'pacemaker-icon',
-    html: `
-      <div class="relative -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10">
-        <div class="pulse-ring"></div>
-        <div class="relative w-8 h-8 rounded-full bg-gradient-to-tr from-knu-red to-orange-500 text-white shadow-glow flex items-center justify-center font-bold text-sm ring-2 ring-white">
-          🏃
-        </div>
-        <div class="absolute -bottom-4 bg-gray-900 text-yellow-300 text-[9px] font-bold px-1.5 py-0.2 rounded-full shadow whitespace-nowrap">
-          페이스메이커
-        </div>
-      </div>
-    `,
-    iconSize: [0, 0]
-  });
-
-  ghostMarker = map.marker(SHORTCUT_PATH[0], icon.html);
-}
-
-
-let paceProgress = 0;
-let isPacePlaying = false;
-let paceSpeed = 1.0;
-let lastAnimTime = null;
-let animFrameId = null;
-const CYCLE_DURATION_SEC = 22;
-
-const pacePlayBtn = document.getElementById('pacePlayBtn');
-const pacePlayIcon = document.getElementById('pacePlayIcon');
-const paceScrubber = document.getElementById('paceScrubber');
-const paceStatusText = document.getElementById('paceStatusText');
-const paceResetBtn = document.getElementById('paceResetBtn');
-const paceSpeedBtn = document.getElementById('paceSpeedBtn');
-
-function updatePacemaker() {
-  const pos = getInterpolatedPoint(SHORTCUT_PATH, paceProgress);
-  if (ghostMarker) {
-    ghostMarker.setLatLng(pos);
-  }
-  paceScrubber.value = (paceProgress * 100).toFixed(1);
-
-  const remainM = Math.round(420 * (1 - paceProgress));
-  const remainSec = Math.round(420 * (1 - paceProgress));
-  const rMin = Math.floor(remainSec / 60);
-  const rSec = remainSec % 60;
-
-  if (paceProgress >= 1.0) {
-    paceStatusText.textContent = `🎯 융복합관 도착 완료!`;
-    stopPacemaker();
-  } else if (isPacePlaying) {
-    paceStatusText.textContent = `${(4.8 * paceSpeed).toFixed(1)} km/h • 남은거리 ${remainM}m (${rMin}분 ${rSec}초)`;
-  } else {
-    paceStatusText.textContent = `권장 4.8 km/h • 대기중 (${Math.round(paceProgress * 100)}%)`;
-  }
-
-  syncStepWithProgress(paceProgress);
-}
-
-function paceLoop(timestamp) {
-  if (!lastAnimTime) lastAnimTime = timestamp;
-  const dt = (timestamp - lastAnimTime) / 1000;
-  lastAnimTime = timestamp;
-
-  if (isPacePlaying) {
-    paceProgress += (dt / CYCLE_DURATION_SEC) * paceSpeed;
-    if (paceProgress >= 1.0) {
-      paceProgress = 1.0;
-      updatePacemaker();
-      return;
+async function search(kind) {
+  const query = $(`${kind}Query`).value.trim(), container = $(`${kind}Results`);
+  const generation = ++searchGenerations[kind]; container.replaceChildren();
+  if (!query) { message('검색할 장소를 입력해주세요.', true); return; }
+  container.textContent = '검색 중…';
+  try {
+    let results;
+    if (hasBackend) {
+      const response = await fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}`, {signal: AbortSignal.timeout(15000)});
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || '검색에 실패했습니다.'); results = data.places;
+    } else results = await map.search(query);
+    if (generation !== searchGenerations[kind]) return;
+    container.replaceChildren();
+    if (!results.length) { container.textContent = '검색 결과가 없습니다. 다른 장소명을 입력해주세요.'; return; }
+    for (const place of results) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'place-option';
+      const name = document.createElement('strong'); name.textContent = place.name;
+      const address = document.createElement('span'); address.textContent = place.address;
+      button.append(name, address); button.onclick = () => selectPlace(kind, place); container.appendChild(button);
     }
-    updatePacemaker();
-    animFrameId = requestAnimationFrame(paceLoop);
+  } catch (error) {
+    if (generation !== searchGenerations[kind]) return;
+    container.replaceChildren(); container.textContent = '장소 검색에 실패했습니다. 다시 시도해주세요.';
   }
 }
-
-function startPacemaker() {
-  if (paceProgress >= 1.0) paceProgress = 0;
-  isPacePlaying = true;
-  lastAnimTime = null;
-  pacePlayIcon.className = 'fa-solid fa-pause text-xs';
-  animFrameId = requestAnimationFrame(paceLoop);
-}
-
-function stopPacemaker() {
-  isPacePlaying = false;
-  pacePlayIcon.className = 'fa-solid fa-play text-xs ml-0.5';
-  if (animFrameId) {
-    cancelAnimationFrame(animFrameId);
-    animFrameId = null;
+async function findRoute(event) {
+  event.preventDefault();
+  if (!places.start || !places.end) { message('출발지와 도착지를 검색 결과에서 선택해주세요.', true); return; }
+  clearRoute();
+  if (!hasBackend) { message('현재 길찾기 연결을 준비 중입니다. 잠시 후 다시 시도해주세요.', true); return; }
+  const start = {...places.start}, end = {...places.end};
+  if (metersBetween(start.coords, end.coords) < 5) { message('출발지와 도착지가 너무 가깝습니다.', true); return; }
+  const generation = routeGeneration; routeController = new AbortController();
+  const timeout = setTimeout(() => routeController?.abort(), 18000);
+  $('findRoute').disabled = true; $('findRoute').textContent = '경로 찾는 중…'; message('카카오 도보 경로를 찾고 있습니다.');
+  try {
+    const response = await fetch(`${apiBase}/api/route`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({start, end, routeMode: $('routeMode').value}), signal: routeController.signal});
+    const route = await response.json();
+    if (generation !== routeGeneration) return;
+    if (!response.ok) throw new Error(route.error || '경로를 찾지 못했습니다.');
+    const metrics = makeRouteMetrics(route.points);
+    // Reject disconnected provider segments instead of drawing invented connectors.
+    for (let i = 1; i < route.points.length; i++) if (metersBetween(route.points[i - 1], route.points[i]) > 2000) throw new Error('경로 좌표가 이어지지 않습니다. 다른 장소로 다시 검색해주세요.');
+    selectedRoute = {...route, start, end, metrics};
+    layers.push(map.polyline(route.points, {color: '#ffffff', weight: 10, opacity: .9}), map.polyline(route.points, {color: '#c8102e', weight: 6, opacity: .95}));
+    layers.push(map.marker(route.points[0], '<div class="nav-marker origin">출<span>보행 시작</span></div>'), map.marker(route.points.at(-1), '<div class="nav-marker destination">도<span>보행 안내 끝</span></div>'));
+    map.fitPath(route.points); $('mapEmptyHint').hidden = true;
+    $('routeNames').textContent = `${start.name} → ${end.name}`;
+    const coverageNotes = [];
+    if (route.startOffset > 30) coverageNotes.push(`검색한 출발 좌표와 보행 경로 시작점은 약 ${Math.round(route.startOffset)}m 떨어져 있습니다.`);
+    if (route.endOffset > 30) coverageNotes.push(`제공된 보행 경로 끝에서 검색한 장소 좌표까지는 직선거리 약 ${Math.round(route.endOffset)}m입니다. 건물 출입구를 확인해주세요.`);
+    if (route.geometryWarning) coverageNotes.push('API 예상 거리와 제공 좌표 길이에 차이가 있습니다. 페이스메이커는 제공된 경로선까지만 안내합니다.');
+    $('routeCoverage').textContent = coverageNotes.join(' '); $('routeCoverage').hidden = !coverageNotes.length;
+    $('routeMinutes').textContent = `${Math.ceil(route.duration / 60)}분`;
+    $('routeDistance').textContent = formatDistance(route.distance);
+    $('routeArrival').textContent = new Date(Date.now() + route.duration * 1000).toLocaleTimeString('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false});
+    $('routeInstructions').replaceChildren();
+    for (const step of route.instructions) { const li = document.createElement('li'); li.textContent = `${step.text}${step.distance ? ` · ${formatDistance(step.distance)}` : ''}`; $('routeInstructions').appendChild(li); }
+    $('routeSummary').hidden = $('pacePanel').hidden = false;
+    pacemaker.setRoute(selectedRoute); $('paceRemaining').textContent = formatDistance(metrics.total); updatePaceTime(metrics.total);
+    message('경로를 지도에 표시했습니다. 아래에서 미리보기 또는 도보 안내를 시작하세요.');
+  } catch (error) {
+    if (generation !== routeGeneration) return;
+    message(error.name === 'AbortError' ? '경로 요청 시간이 초과됐습니다. 다시 시도해주세요.' : error.message || '경로를 찾지 못했습니다.', true);
+  } finally {
+    clearTimeout(timeout);
+    if (generation === routeGeneration) { routeController = null; $('findRoute').textContent = '도보 경로 찾기'; updateReady(); }
   }
 }
-
-pacePlayBtn.onclick = () => {
-  if (isPacePlaying) {
-    stopPacemaker();
-    updatePacemaker();
-  } else {
-    startPacemaker();
+function updatePaceTime(remaining) {
+  $('paceTime').textContent = Number.isFinite(remaining) ? `약 ${Math.ceil(remaining / (Number($('walkSpeed').value) / 3.6) / 60)}분` : '—';
+}
+function updatePace(state) {
+  if (state.message) $('paceStatus').textContent = state.message;
+  if (state.mode) {
+    $('paceMode').textContent = {idle: '대기', waiting: '위치 확인', live: 'GPS 안내', preview: '미리보기 · 12배속', 'preview-complete': '미리보기 완료', arrived: '도착'}[state.mode] || '대기';
+    $('stopWalking').disabled = ['idle', 'arrived'].includes(state.mode);
+    $('startWalking').disabled = ['waiting', 'live'].includes(state.mode);
   }
-};
-
-paceResetBtn.onclick = () => {
-  stopPacemaker();
-  paceProgress = 0;
-  updatePacemaker();
-  if (map) {
-    map.panTo(NODES.MAIN_GATE_BUS_STOP);
-  }
-};
-
-paceScrubber.oninput = (e) => {
-  stopPacemaker();
-  paceProgress = parseFloat(e.target.value) / 100;
-  updatePacemaker();
-};
-
-const speeds = [1.0, 1.5, 2.5];
-let sIdx = 0;
-paceSpeedBtn.onclick = () => {
-  sIdx = (sIdx + 1) % speeds.length;
-  paceSpeed = speeds[sIdx];
-  paceSpeedBtn.textContent = `${paceSpeed.toFixed(1)}x`;
-  updatePacemaker();
-};
-
-let currentStep = 1;
-const stepCards = [
-  document.getElementById('stepCard1'),
-  document.getElementById('stepCard2'),
-  document.getElementById('stepCard3')
-];
-const stepDots = document.getElementById('stepDots').children;
-const stepCounterBadge = document.getElementById('stepCounterBadge');
-const prevStepBtn = document.getElementById('prevStepBtn');
-const nextStepBtn = document.getElementById('nextStepBtn');
-
-function showStep(stepNum, panCamera = true) {
-  currentStep = stepNum;
-  stepCards.forEach((c, idx) => {
-    if (idx + 1 === stepNum) {
-      c.classList.remove('hidden');
-      stepDots[idx].className = 'w-5 h-2.5 rounded-full bg-knu-red transition-all';
-    } else {
-      c.classList.add('hidden');
-      stepDots[idx].className = 'w-2.5 h-2.5 rounded-full bg-gray-200 transition-all';
-    }
+  if ('remaining' in state) { $('paceRemaining').textContent = Number.isFinite(state.remaining) ? formatDistance(state.remaining) : '위치 확인 중'; updatePaceTime(state.remaining); }
+  if (Number.isFinite(state.progress)) $('paceProgress').value = state.progress;
+}
+function getPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('현재 위치를 지원하지 않는 기기입니다.'));
+    navigator.geolocation.getCurrentPosition(position => {
+      if (!validLocation(position)) return reject(new Error('현재 위치의 정확도가 낮습니다. 잠시 후 다시 시도해주세요.'));
+      resolve(position);
+    }, error => reject(new Error(error.code === 1 ? '위치 권한이 거부되었습니다. 장소 검색으로 출발지를 선택할 수 있습니다.' : '현재 위치를 받지 못했습니다. 다시 시도해주세요.')), {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
   });
-
-  stepCounterBadge.textContent = `Step ${stepNum}/3`;
-  prevStepBtn.disabled = stepNum === 1;
-  nextStepBtn.disabled = stepNum === 3;
-
-  if (panCamera && map) {
-    if (stepNum === 1) map.panTo(NODES.MAIN_GATE_BUS_STOP);
-    else if (stepNum === 2) map.panTo(NODES.IT1_1F);
-    else if (stepNum === 3) map.panTo(NODES.BRIDGE_3F);
-  }
 }
-
-function syncStepWithProgress(progress) {
-  if (progress < 0.45) {
-    if (currentStep !== 1) showStep(1, false);
-  } else if (progress < 0.75) {
-    if (currentStep !== 2) showStep(2, false);
-  } else {
-    if (currentStep !== 3) showStep(3, false);
+async function init() {
+  for (const kind of ['start', 'end']) {
+    $(`${kind}Search`).onclick = () => search(kind);
+    $(`${kind}Query`).onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); search(kind); } };
+    $(`${kind}Query`).oninput = () => { if (kind === 'start') positionGeneration++; places[kind] = null; searchGenerations[kind]++; $(`${kind}Results`).replaceChildren(); clearRoute(); message('장소를 검색하고 결과에서 선택해주세요.'); };
   }
+  $('routeForm').onsubmit = findRoute;
+  $('routeMode').onchange = () => { clearRoute(); message('새 경로 조건으로 다시 검색해주세요.'); };
+  $('swapPlaces').onclick = () => { positionGeneration++; [places.start, places.end] = [places.end, places.start]; [$('startQuery').value, $('endQuery').value] = [$('endQuery').value, $('startQuery').value]; for (const kind of ['start', 'end']) { searchGenerations[kind]++; $(`${kind}Results`).replaceChildren(); } clearRoute(); message('출발지와 도착지를 바꿨습니다.'); };
+  $('useLocation').onclick = async () => {
+    const generation = ++positionGeneration; $('useLocation').disabled = true; message('현재 위치 확인 중…');
+    try { const position = await getPosition(); if (generation !== positionGeneration) return; selectPlace('start', {name: '현재 위치', coords: [position.coords.latitude, position.coords.longitude]}); }
+    catch (error) { message(error.message, true); } finally { $('useLocation').disabled = false; }
+  };
+  $('fitRoute').onclick = () => selectedRoute && map.fitPath(selectedRoute.points);
+  $('previewRoute').onclick = () => pacemaker.preview();
+  $('startWalking').onclick = () => pacemaker.startLive();
+  $('stopWalking').onclick = () => { pacemaker.stop(); if (selectedRoute) { $('paceProgress').value = 0; $('paceRemaining').textContent = formatDistance(selectedRoute.metrics.total); updatePaceTime(selectedRoute.metrics.total); } };
+  $('walkSpeed').onchange = () => { pacemaker.setSpeed(Number($('walkSpeed').value)); if (selectedRoute && pacemaker.mode === 'idle') updatePaceTime(selectedRoute.metrics.total); };
+  for (const [id, sky] of [['mapTypeRoad', false], ['mapTypeSky', true]]) $(id).onclick = () => {
+    if (!map) return;
+    map.setType(sky); $('mapTypeRoad').classList.toggle('active', !sky); $('mapTypeSky').classList.toggle('active', sky); $('mapTypeRoad').setAttribute('aria-pressed', String(!sky)); $('mapTypeSky').setAttribute('aria-pressed', String(sky));
+  };
+  map = await createCampusMap(); pacemaker = new RoutePacemaker(map, updatePace);
+  window.addEventListener('pagehide', () => pacemaker.stop());
+  updateReady();
 }
-
-prevStepBtn.onclick = () => {
-  if (currentStep > 1) {
-    showStep(currentStep - 1, true);
-    paceProgress = (currentStep - 1) * 0.45;
-    updatePacemaker();
-  }
-};
-
-nextStepBtn.onclick = () => {
-  if (currentStep < 3) {
-    showStep(currentStep + 1, true);
-    paceProgress = currentStep * 0.5;
-    updatePacemaker();
-  }
-};
-
-const mapTypeRoad = document.getElementById('mapTypeRoad');
-const mapTypeSky = document.getElementById('mapTypeSky');
-
-mapTypeRoad.onclick = () => {
-  if (map) {
-    map.setType(false);
-    mapTypeRoad.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-knu-red text-white shadow-md shadow-knu-red/30 flex items-center space-x-1';
-    mapTypeSky.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all text-gray-600 hover:text-gray-900 flex items-center space-x-1';
-  }
-};
-
-mapTypeSky.onclick = () => {
-  if (map) {
-    map.setType(true);
-    mapTypeSky.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-knu-red text-white shadow-md shadow-knu-red/30 flex items-center space-x-1';
-    mapTypeRoad.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all text-gray-600 hover:text-gray-900 flex items-center space-x-1';
-  }
-};
-
-document.getElementById('toggleBoundary').onchange = (e) => {
-  if (campusPolygon) {
-    if (e.target.checked) campusPolygon.addTo(map);
-    else map.removeLayer(campusPolygon);
-  }
-};
-
-window.onload = async () => {
-  calculateDeadline();
-  await initMap();
-  initNavigation();
-  updatePacemaker();
-};
+window.addEventListener('DOMContentLoaded', () => init().catch(() => message('지도를 불러오지 못했습니다. 새로고침해주세요.', true)));

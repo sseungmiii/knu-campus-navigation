@@ -1,0 +1,16 @@
+const assert = require('node:assert/strict');
+const {metersBetween, makeRouteMetrics, pointAtMeters, projectOnRoute, validLocation} = require('../src/geo-utils.js');
+const metrics = makeRouteMetrics([[35, 128], [35, 128], [35, 128.001], [35.001, 128.001]]);
+assert.ok(Math.abs(metersBetween([0, 0], [0, 1]) - 111195) < 1);
+assert.deepEqual(pointAtMeters(metrics, -20), metrics.points[0]);
+assert.deepEqual(pointAtMeters(metrics, metrics.total + 200), metrics.points.at(-1));
+const middle = pointAtMeters(metrics, metrics.total / 2);
+assert.ok(Math.abs(projectOnRoute(metrics, middle).distance - metrics.total / 2) < .05);
+assert.ok(projectOnRoute(metrics, [35.01, 128.01]).offset > 100);
+assert.throws(() => makeRouteMetrics([[35, 128], [35, 128]]));
+assert.throws(() => makeRouteMetrics([[NaN, 128], [35, 128]]));
+const fix = {coords: {latitude: 35, longitude: 128, accuracy: 5}, timestamp: 100000};
+assert.equal(validLocation(fix, 100000), true);
+assert.equal(validLocation(fix, 116000), false);
+assert.equal(validLocation({...fix, coords: {...fix.coords, accuracy: 150}}, 100000), false);
+console.log('PASS: meter-based motion, projection, repeated points, invalid geometry and stale/inaccurate GPS');

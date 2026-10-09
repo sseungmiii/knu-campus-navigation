@@ -7,7 +7,7 @@
     "dev": "node scripts/dev-server.cjs",
     "preview": "node scripts/dev-server.cjs --port=4173",
     "check": "node scripts/check.cjs",
-    "test": "node tests/route-utils.test.cjs && node tests/navigation.test.cjs"
+    "test": "node tests/run.cjs"
   },
   "engines": { "node": ">=18" }
 }

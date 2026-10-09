@@ -8,3 +8,7 @@
 - Run npm run check and npm test before publishing changes. Use npm run dev for local browser checks.
 - Menu and congestion values are demo data. Do not label them as live without implementing a data source.
 - Preserve Leaflet/OpenStreetMap/Esri attribution and avoid introducing REST API/Admin keys into browser files. map-config.js contains the user-authorized public Kakao JavaScript key; domain restrictions are configured in Kakao Developers.
+
+- Current live feature modules: src/app.js, src/geo-utils.js, src/pacemaker.js, server/routing.cjs. Legacy campus demo scripts are not loaded. Preserve Kakao as the provider unless the user requests a change.
+- REST key lives only in ignored .env/server environment. Static serving must exclude server and hidden files. Do not log location or upstream credentials.
+- Current requested scope is local implementation first. GitHub Pages needs a separately deployed HTTPS API; do not publish an unusable replacement to main before it is configured.

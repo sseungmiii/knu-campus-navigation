@@ -1,0 +1,28 @@
+const assert = require('node:assert/strict'), vm = require('node:vm'), fs = require('node:fs');
+let now = 0, gpsCallback, errorCallback, cleared = 0;
+const frames = new Map(), updates = [], markers = [];
+const context = {console, Date, performance: {now: () => now}, window: {isSecureContext: true}, requestAnimationFrame: cb => { const id = frames.size + 1; frames.set(id, cb); return id; }, cancelAnimationFrame: id => frames.delete(id), navigator: {geolocation: {watchPosition: (ok, error) => {gpsCallback = ok; errorCallback = error; return 0;}, clearWatch: () => cleared++}}};
+vm.createContext(context);
+for (const file of ['geo-utils.js', 'pacemaker.js']) vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../src', file), 'utf8'), context);
+const Class = vm.runInContext('RoutePacemaker', context);
+const view = {marker: point => { const marker = {point, removed: false, setLatLng(p) {this.point = p;}, remove() {this.removed = true;}}; markers.push(marker); return marker; }};
+const pace = new Class(view, state => updates.push(state));
+function animationStep() { const [id, callback] = frames.entries().next().value; frames.delete(id); callback(now); }
+const route = {mode: 'walk', points: [[35, 128], [35, 128.001]], endOffset: 0};
+pace.setRoute(route); assert.equal(markers.length, 0);
+pace.preview(); now = 1000; animationStep(); assert.ok(pace.targetDistance() > 15 && pace.targetDistance() < 17);
+now = 100000; animationStep(); assert.equal(pace.mode, 'preview-complete'); assert.ok(updates.at(-1).remaining === 0);
+pace.stop(); assert.equal(frames.size, 0);
+pace.startLive(); assert.equal(pace.mode, 'waiting');
+const oldCallback = gpsCallback;
+const fix = {coords: {latitude: 35, longitude: 128, accuracy: 5}, timestamp: Date.now()};
+gpsCallback({...fix, coords: {...fix.coords, accuracy: 200}}); assert.equal(pace.mode, 'waiting');
+gpsCallback(fix); assert.equal(pace.mode, 'live');
+now += 1000; assert.ok(pace.targetDistance() > 1.3 && pace.targetDistance() < 1.4);
+gpsCallback({...fix, coords: {...fix.coords, latitude: 36}, timestamp: Date.now()}); assert.equal(pace.offRoute, true);
+pace.stop(); assert.ok(cleared > 0);
+pace.setRoute({...route, points: [[35, 128], [35.001, 128]]}); pace.startLive(); oldCallback(fix); assert.equal(pace.mode, 'waiting');
+errorCallback({code: 1}); assert.equal(pace.mode, 'idle'); assert.match(updates.at(-1).message, /거부/);
+pace.setRoute(route); pace.startLive(); gpsCallback(fix); gpsCallback({...fix, coords: {...fix.coords, longitude: 128.001}, timestamp: Date.now()});
+assert.equal(updates.at(-1).mode, 'arrived'); assert.equal(pace.mode, 'idle');
+console.log('PASS: selected-route motion, real-time speed, preview completion, GPS rejection/off-route/permission denial/arrival and stale callback cleanup');
