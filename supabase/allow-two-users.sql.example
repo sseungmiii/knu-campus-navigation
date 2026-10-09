@@ -1,0 +1,7 @@
+-- Execute in Supabase SQL Editor after creating two email/password Auth accounts.
+-- Replace both UUID placeholders; this is an admin-only operation, never a browser API.
+begin;
+insert into private.schedule_users(slot, user_id)
+values (1, 'FIRST_AUTH_USER_UUID'::uuid), (2, 'SECOND_AUTH_USER_UUID'::uuid)
+on conflict (slot) do update set user_id = excluded.user_id;
+commit;

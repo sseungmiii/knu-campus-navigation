@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .vercel/
+.next/
+public/map/
 .env
 .env.*
 !.env.example

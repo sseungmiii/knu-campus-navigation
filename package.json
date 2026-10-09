@@ -4,11 +4,26 @@
   "private": true,
   "description": "경북대학교 캠퍼스 지도와 지름길 내비게이션 시제품",
   "scripts": {
-    "build": "node scripts/build.cjs",
-    "dev": "node scripts/dev-server.cjs",
-    "preview": "node scripts/dev-server.cjs --port=4173",
+    "build": "node scripts/prepare-map.cjs && next build --webpack",
+    "dev": "node scripts/prepare-map.cjs && next dev --webpack --hostname 127.0.0.1 --port 5174",
+    "start": "next start --hostname 127.0.0.1 --port 5174",
+    "dev:legacy": "node scripts/dev-server.cjs",
+    "build:legacy": "node scripts/build.cjs",
     "check": "node scripts/check.cjs",
     "test": "node tests/run.cjs"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.3",
+    "next": "^16.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
 }

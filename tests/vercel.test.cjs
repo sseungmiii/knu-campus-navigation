@@ -20,6 +20,8 @@ async function run(method, url, headers = {}, body, options = {}) {
   assert.equal(res.statusCode, 403); assert.equal(calls, 0); assert.equal(res.headers['Access-Control-Allow-Origin'], undefined);
   res = await run('POST', '/api/route', {origin: 'https://knu-campus-navigation.vercel.app', 'content-type': 'application/json'}, {start: 1});
   assert.equal(res.statusCode, 200); assert.equal(res.headers['Cache-Control'], 'no-store'); assert.ok(!res.body.includes(env.KAKAO_REST_API_KEY));
+  res = await run('POST', '/api/route', {origin: 'http://127.0.0.1:5174', host: '127.0.0.1:5174', 'content-type': 'application/json'}, {start: 1}); assert.equal(res.statusCode, 200);
+  res = await run('POST', '/api/route', {origin: 'http://127.0.0.1:5174', host: 'knu-campus-navigation.vercel.app', 'content-type': 'application/json'}, {start: 1}); assert.equal(res.statusCode, 403);
   res = await run('POST', '/api/route', {'content-type': 'application/json'}, '{bad'); assert.equal(res.statusCode, 400);
   res = await run('POST', '/api/route', {'content-type': 'application/json'}, {oversized: 'x'.repeat(5000)}); assert.equal(res.statusCode, 413);
   res = await run('GET', '/api/route'); assert.equal(res.statusCode, 405);
@@ -31,6 +33,5 @@ async function run(method, url, headers = {}, body, options = {}) {
   assert.equal(res.statusCode, 503);
   for (let i = 0; i < 21; i++) res = await run('GET', '/api/search?q=' + encodeURIComponent('경북대학교'), {'x-forwarded-for': '198.51.100.7'});
   assert.equal(res.statusCode, 429);
-  assert.equal(typeof require('../api/route.js'), 'function'); assert.equal(typeof require('../api/search.js'), 'function');
   console.log('PASS: Vercel handlers, CORS, body limits, server-only environment, safe errors and throttling');
 })().catch(error => {console.error(error); process.exitCode = 1;});

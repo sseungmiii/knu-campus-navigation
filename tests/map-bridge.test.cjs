@@ -1,0 +1,14 @@
+const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
+const callbacks = {}, elements = new Map();
+const parent = {postMessage() {}};
+const context = vm.createContext({ROUTING_API_BASE_URL:'', location:{hostname:'127.0.0.1',origin:'http://127.0.0.1:5174'}, window:{parent,addEventListener(name,fn){callbacks[name]=fn;}}, document:{getElementById(id){if(!elements.has(id)) elements.set(id,{classList:{toggle(){}},replaceChildren(){},value:''});return elements.get(id);}}});
+vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../src/app.js'),'utf8'),context);
+vm.runInContext('map = {}; pacemaker = {stop(){}};',context);
+const place={name:'경북대학교 도서관',coords:[35.8919,128.6126]};
+const send=(data,extra={})=>callbacks.message({origin:'http://127.0.0.1:5174',source:parent,data,...extra});
+send({type:'knu:destination',place},{origin:'https://untrusted.example'});assert.equal(elements.size,0);
+send({type:'knu:destination',place},{source:{}});assert.equal(elements.size,0);
+send({type:'knu:destination',place:{...place,coords:[Infinity,128]}});assert.equal(elements.size,0);
+send({type:'knu:destination',place}); assert.equal(elements.get('endQuery').value,place.name);
+assert.ok(elements.get('routeMessage').textContent.includes('출발지'));
+console.log('PASS: timetable destination handoff, iframe source/origin validation and invalid coordinate rejection');

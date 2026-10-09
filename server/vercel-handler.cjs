@@ -10,7 +10,8 @@ function json(res, status, data) {
 async function handleApi(kind, req, res, env = process.env, services = {fetchWalkingRoute, searchPlaces}) {
   const origin = req.headers.origin;
   res.setHeader('Vary', 'Origin');
-  if (origin && !origins.has(origin)) return json(res, 403, {error: '허용되지 않은 요청입니다.'});
+  const localOrigin = env.VERCEL !== '1' && ['127.0.0.1:5174', 'localhost:5174'].includes(req.headers.host) && origin === `http://${req.headers.host}`;
+  if (origin && !origins.has(origin) && !localOrigin) return json(res, 403, {error: '허용되지 않은 요청입니다.'});
   if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

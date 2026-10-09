@@ -141,5 +141,16 @@ async function init() {
   map = await createCampusMap(); pacemaker = new RoutePacemaker(map, updatePace);
   window.addEventListener('pagehide', () => pacemaker.stop());
   updateReady();
+  window.parent.postMessage({type: 'knu:map-ready'}, location.origin);
 }
+window.addEventListener('message', event => {
+  if (event.source !== window.parent || event.origin !== location.origin) return;
+  if (event.data?.type === 'knu:ping') {if (map && pacemaker) window.parent.postMessage({type:'knu:map-ready'}, location.origin); return;}
+  if (event.data?.type !== 'knu:destination' || !map || !pacemaker) return;
+  const place = event.data.place;
+  if (typeof place?.name !== 'string' || !place.name.trim() || place.name.length > 150 || !Array.isArray(place.coords) || place.coords.length !== 2 || !place.coords.every(Number.isFinite) || Math.abs(place.coords[0]) > 90 || Math.abs(place.coords[1]) > 180) return;
+  selectPlace('end', {name: place.name, coords: place.coords});
+  if (places.start) findRoute({preventDefault() {}});
+  else message(`${place.name}을 도착지로 선택했습니다. 출발지 또는 현재 위치를 선택해주세요.`);
+});
 window.addEventListener('DOMContentLoaded', () => init().catch(() => message('지도를 불러오지 못했습니다. 새로고침해주세요.', true)));

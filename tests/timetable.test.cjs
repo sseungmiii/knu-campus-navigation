@@ -1,0 +1,13 @@
+const assert = require('node:assert/strict');
+const {validateClass, koreaClock, todayClasses, upcomingClass} = require('../lib/timetable.cjs');
+const row = {title:'알고리즘',term:'2026년 2학기',weekday:1,start_minute:540,end_minute:615,place_name:'IT1호관',latitude:35.889,longitude:128.61,starts_on:'2026-09-01',ends_on:'2026-12-31'};
+assert.deepEqual(validateClass({...row,owner_id:'attacker',id:'ignored'}),row);
+for(const input of [{...row,end_minute:540},{...row,weekday:0},{...row,latitude:NaN},{...row,ends_on:'2026-02-30'},{...row,starts_on:'2027-01-01'},{...row,title:' '},{...row,start_minute:2.5}]) assert.throws(()=>validateClass(input));
+assert.deepEqual(koreaClock(new Date('2026-10-11T15:01:00Z')), {date:'2026-10-12',weekday:1,minute:1});
+const before = new Date('2026-10-12T00:01:00Z');
+assert.equal(upcomingClass([row], before), row);
+assert.equal(upcomingClass([row], new Date('2026-10-12T02:00:00Z')),null);
+assert.equal(todayClasses([{...row,ends_on:'2026-10-01'}],before).length,0);
+assert.equal(todayClasses([{...row,weekday:2}],before).length,0);
+assert.deepEqual(todayClasses([{...row,title:'late',start_minute:700},row],before).map(x=>x.title),['알고리즘','late']);
+console.log('PASS: timetable validation, owner-field exclusion, Korea date rollover, term boundaries and upcoming class');
