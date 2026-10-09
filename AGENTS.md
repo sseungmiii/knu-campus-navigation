@@ -7,4 +7,4 @@
 - Scripts are loaded in order as classic browser scripts. openPoiModal must remain accessible to marker click handlers.
 - Run npm run check and npm test before publishing changes. Use npm run dev for local browser checks.
 - Menu and congestion values are demo data. Do not label them as live without implementing a data source.
-- Preserve Leaflet/OpenStreetMap/Esri attribution and avoid introducing credentials into browser files.
+- Preserve Leaflet/OpenStreetMap/Esri attribution and avoid introducing REST API/Admin keys into browser files. map-config.js contains the user-authorized public Kakao JavaScript key; domain restrictions are configured in Kakao Developers.

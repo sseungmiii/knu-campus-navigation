@@ -21,9 +21,24 @@
 
   <!-- Map Container -->
   <div id="map"></div>
+  <div id="mapProviderStatus" class="map-provider-status" role="status">카카오지도 연결 중…</div>
+  <div id="selectedRouteStatus" class="selected-route-status" hidden></div>
+  <dialog id="navigationDialog" aria-labelledby="navigationTitle">
+    <div class="navigation-header"><h2 id="navigationTitle">길찾기</h2><button id="closeNavigation" type="button" aria-label="길찾기 닫기">✕</button></div>
+    <p class="navigation-note">캠퍼스 경로는 등록된 시연 좌표입니다. 실제 출입 가능 여부를 확인해주세요. 하단 안내·페이스메이커는 기존 정문 → 융복합관 시연입니다.</p>
+    <form id="placeSearchForm"><label for="placeQuery">장소 검색</label><div class="search-row"><input id="placeQuery" placeholder="예: 경북대학교 도서관" maxlength="100"/><button type="submit">검색</button></div></form>
+    <div id="placeResults" aria-live="polite"></div>
+    <label for="routeStart">출발지</label><select id="routeStart"></select>
+    <label for="routeEnd">도착지</label><select id="routeEnd"></select>
+    <label for="routeMode">캠퍼스 경로 조건</label><select id="routeMode"><option value="shortest">최단 거리 (건물 통로 포함)</option><option value="outside">건물 통로 제외</option></select>
+    <button id="findRoute" type="button" class="primary-route-button">캠퍼스 경로 확인</button>
+    <p id="routeResult" role="status"></p>
+    <div class="navigation-links"><a id="kakao-walk" target="_blank" rel="noopener noreferrer">카카오맵 도보 길찾기 ↗</a><a id="kakao-traffic" target="_blank" rel="noopener noreferrer">카카오맵 대중교통 ↗</a></div>
+  </dialog>
 
-  <!-- [우측 상단: 지도 모드 & 캠퍼스 공식 경계선 토글] -->
+  <!-- [우측 상단: 지도 모드 & 캠퍼스 경계 (시연) 토글] -->
   <div class="fixed top-3 right-3 sm:top-5 sm:right-5 z-30 pointer-events-auto flex flex-col items-end space-y-2">
+    <button id="openNavigation" type="button" disabled class="px-4 py-2 bg-white rounded-xl shadow font-bold text-sm">길찾기</button>
     <div class="bg-white/95 backdrop-blur-md rounded-2xl shadow-card border border-gray-200/80 p-1.5 flex items-center space-x-1">
       <button id="mapTypeRoad" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-knu-red text-white shadow-md shadow-knu-red/30 flex items-center space-x-1">
         <i class="fa-solid fa-map text-xs"></i>
@@ -302,8 +317,12 @@
   </div>
 
   <!-- Leaflet Map Script -->
+  <script src="./src/map-config.js"></script>
+  <script src="./src/map-service.js"></script>
   <script src="./src/campus-data.js"></script>
   <script src="./src/route-utils.js"></script>
+  <script src="./src/navigation-utils.js"></script>
+  <script src="./src/navigation.js"></script>
   <script src="./src/app.js"></script>
 </body>
 </html>

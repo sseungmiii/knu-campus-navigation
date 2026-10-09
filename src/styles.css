@@ -19,6 +19,26 @@ body, html {
   z-index: 1;
 }
 
+.map-provider-status { position: fixed; right: 12px; top: 150px; z-index: 20; max-width: 260px; padding: 5px 8px; background: #fff; border-radius: 8px; font-size: 11px; box-shadow: 0 2px 6px #0002; }
+.selected-route-status { position: fixed; top: 45%; left: 12px; right: 12px; z-index: 20; background: #eff6ff; color: #1e40af; border-radius: 10px; padding: 8px; font-size: 12px; pointer-events: none; }
+.selected-route-status[hidden] { display: none; }
+#navigationDialog { width: min(460px, calc(100% - 24px)); max-height: 85vh; overflow: auto; margin: auto; padding: 20px; border: 0; border-radius: 18px; color: #1f2937; box-shadow: 0 10px 40px #0004; }
+#navigationDialog::backdrop { background: #0006; }
+.navigation-header { display: flex; justify-content: space-between; align-items: center; font-size: 20px; font-weight: 700; }
+.navigation-note { margin: 12px 0; font-size: 12px; color: #64748b; }
+#navigationDialog label { display: block; font-size: 13px; font-weight: 600; margin-top: 12px; }
+#navigationDialog input, #navigationDialog select { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px; background: #fff; font-size: 13px; }
+#navigationDialog button { cursor: pointer; }
+.search-row, .navigation-links { display: flex; gap: 8px; }
+.search-row button, .place-result button { flex-shrink: 0; background: #f1f5f9; padding: 5px 10px; border-radius: 8px; font-size: 12px; }
+#placeResults { max-height: 180px; overflow-y: auto; font-size: 12px; }
+.place-result { display: flex; align-items: center; gap: 6px; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+.place-result span { flex: 1; }
+.primary-route-button { width: 100%; padding: 11px; background: #c8102e; color: #fff; font-weight: 700; border-radius: 10px; margin-top: 16px; }
+#routeResult { white-space: pre-line; margin: 12px 0; font-size: 13px; }
+.navigation-links { flex-wrap: wrap; }
+.navigation-links a { color: #1d4ed8; background: #eff6ff; padding: 8px; border-radius: 8px; font-size: 12px; }
+
 @keyframes pulseRing {
   0% {
     transform: scale(0.6);

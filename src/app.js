@@ -1,56 +1,43 @@
 let map = null;
 let campusPolygon = null;
-let tileLayer = null;
 
-function initMap() {
-  map = L.map('map', {
-    center: [35.8868, 128.6118],
-    zoom: 17,
-    zoomControl: false
-  });
+async function initMap() {
+  map = await createCampusMap();
 
-  L.control.zoom({ position: 'topright' }).addTo(map);
-
-  // OpenStreetMap 타일레이어
-  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
-
-  // 경북대 공식 경계선
-  campusPolygon = L.polygon(CAMPUS_BOUNDARY, {
+  // 캠퍼스 경계 시연 좌표
+  campusPolygon = map.polygon(CAMPUS_BOUNDARY, {
     color: '#C8102E',
     weight: 2.5,
     dashArray: '5, 5',
     fillColor: '#C8102E',
     fillOpacity: 0.08
-  }).addTo(map);
+  });
 
   // 외곽 우회로 (점선)
-  L.polyline(DETOUR_PATH, {
+  map.polyline(DETOUR_PATH, {
     color: '#64748b',
     weight: 4,
     dashArray: '8, 8',
     opacity: 0.7
-  }).addTo(map);
+  });
 
   // 이동 경로 글로우 라인
-  L.polyline(SHORTCUT_PATH, {
+  map.polyline(SHORTCUT_PATH, {
     color: '#ff8599',
     weight: 10,
     opacity: 0.5
-  }).addTo(map);
+  });
 
   // 이동 경로 메인 라인
-  L.polyline(SHORTCUT_PATH, {
+  map.polyline(SHORTCUT_PATH, {
     color: '#C8102E',
     weight: 5,
     opacity: 0.95
-  }).addTo(map);
+  });
 
   // 커스텀 노드 오버레이
   function addCustomNode(lat, lng, emoji, label, badge, bgClass) {
-    const icon = L.divIcon({
+    const icon = ({
       className: 'custom-div-icon',
       html: `
         <div class="cursor-pointer group flex flex-col items-center -translate-x-1/2 -translate-y-full">
@@ -65,7 +52,7 @@ function initMap() {
       `,
       iconSize: [0, 0]
     });
-    L.marker([lat, lng], { icon: icon }).addTo(map);
+    map.marker([lat, lng], icon.html);
   }
 
   addCustomNode(NODES.MAIN_GATE_BUS_STOP[0], NODES.MAIN_GATE_BUS_STOP[1], '🚏', '정문 건너 버스정류장', '출발', 'bg-blue-600');
@@ -79,7 +66,7 @@ function initMap() {
 
 function initPoiMarkers() {
   POI_LIST.forEach(poi => {
-    const icon = L.divIcon({
+    const icon = ({
       className: 'poi-div-icon',
       html: `
         <div class="cursor-pointer flex flex-col items-center group -translate-x-1/2 -translate-y-1/2" onclick="openPoiModal('${poi.id}')">
@@ -93,7 +80,7 @@ function initPoiMarkers() {
       `,
       iconSize: [0, 0]
     });
-    L.marker(poi.coords, { icon: icon }).addTo(map);
+    map.marker(poi.coords, icon.html);
   });
 }
 
@@ -162,7 +149,7 @@ document.getElementById('originSelect').onchange = calculateDeadline;
 let ghostMarker = null;
 
 function initPacemakerMarker() {
-  const icon = L.divIcon({
+  const icon = ({
     className: 'pacemaker-icon',
     html: `
       <div class="relative -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10">
@@ -178,7 +165,7 @@ function initPacemakerMarker() {
     iconSize: [0, 0]
   });
 
-  ghostMarker = L.marker(SHORTCUT_PATH[0], { icon: icon }).addTo(map);
+  ghostMarker = map.marker(SHORTCUT_PATH[0], icon.html);
 }
 
 
@@ -351,16 +338,16 @@ const mapTypeRoad = document.getElementById('mapTypeRoad');
 const mapTypeSky = document.getElementById('mapTypeSky');
 
 mapTypeRoad.onclick = () => {
-  if (tileLayer) {
-    tileLayer.setUrl('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+  if (map) {
+    map.setType(false);
     mapTypeRoad.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-knu-red text-white shadow-md shadow-knu-red/30 flex items-center space-x-1';
     mapTypeSky.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all text-gray-600 hover:text-gray-900 flex items-center space-x-1';
   }
 };
 
 mapTypeSky.onclick = () => {
-  if (tileLayer) {
-    tileLayer.setUrl('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+  if (map) {
+    map.setType(true);
     mapTypeSky.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-knu-red text-white shadow-md shadow-knu-red/30 flex items-center space-x-1';
     mapTypeRoad.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all text-gray-600 hover:text-gray-900 flex items-center space-x-1';
   }
@@ -373,8 +360,9 @@ document.getElementById('toggleBoundary').onchange = (e) => {
   }
 };
 
-window.onload = () => {
+window.onload = async () => {
   calculateDeadline();
-  initMap();
+  await initMap();
+  initNavigation();
   updatePacemaker();
 };
