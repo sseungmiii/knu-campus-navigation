@@ -106,7 +106,7 @@ export default function CampusShell({supabaseConfig}) {
   }
   function navigate(row) {
     if (!ready) return;
-    frame.current.contentWindow.postMessage({type:'knu:destination', place: {name: row.place_name, coords: [row.latitude,row.longitude]}, course: row.title}, location.origin);
+    frame.current.contentWindow.postMessage({type:'knu:destination', place: {name: row.place_name, coords: [row.latitude,row.longitude]}, course: row.title, classStart:timetable.nextOccurrence(row)}, location.origin);
     setOpen(false);
   }
   const change = key => event => setForm(previous => ({...previous, [key]: event.target.value}));

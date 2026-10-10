@@ -19,13 +19,16 @@
           <div class="search-field"><label for="startQuery"><span class="point-dot start-dot"></span>출발지</label><div class="input-row"><input id="startQuery" type="search" placeholder="출발 장소 검색" autocomplete="off" maxlength="100"/><button id="startSearch" type="button" aria-label="출발지 검색">검색</button></div><div id="startResults" class="search-results" aria-live="polite"></div></div>
           <div class="origin-actions"><button id="useLocation" type="button">⌖ 현재 위치에서 출발</button><button id="swapPlaces" type="button" aria-label="출발지와 도착지 바꾸기">⇅ 바꾸기</button></div>
           <div class="search-field"><label for="endQuery"><span class="point-dot end-dot"></span>도착지</label><div class="input-row"><input id="endQuery" type="search" placeholder="예: 경북대학교 도서관" autocomplete="off" maxlength="100"/><button id="endSearch" type="button" aria-label="도착지 검색">검색</button></div><div id="endResults" class="search-results" aria-live="polite"></div></div>
-          <label for="routeMode">경로 조건</label><select id="routeMode"><option value="BROAD_FIRST">넓은 길 우선</option><option value="SHORTEST">최단 경로</option><option value="ACCESSIBLE">편안한 길 (카카오)</option></select>
+          <label for="transportMode">이동 수단</label><select id="transportMode"><option value="walk">도보 · 캠퍼스 이동</option><option value="transit">대중교통 · 버스와 지하철</option></select>
+          <label for="routeMode">도보 경로 조건</label><select id="routeMode"><option value="BROAD_FIRST">넓은 길 우선</option><option value="SHORTEST">최단 경로</option><option value="ACCESSIBLE">편안한 길 (카카오)</option></select>
           <button id="findRoute" class="primary" type="submit" disabled>도보 경로 찾기</button>
         </form>
         <p id="routeMessage" class="message" role="status">출발지와 도착지를 검색 결과에서 선택해주세요.</p>
       </section>
+      <section class="departure-panel" aria-labelledby="departureTitle"><h2 id="departureTitle">수업에 맞춰 출발하기</h2><label for="classStart">수업 시작 · 한국 시각</label><input id="classStart" type="datetime-local"/><div class="button-pair"><label for="indoorMinutes">건물 내부 이동(분)<input id="indoorMinutes" type="number" min="0" max="30" value="3"/></label><label for="safetyMinutes">여유 시간(분)<input id="safetyMinutes" type="number" min="0" max="60" value="5"/></label></div><p id="deadlineStatus" class="message" role="status">수업 시각과 경로를 선택하면 출발 마감 시각을 계산합니다.</p></section>
+      <section id="transitPanel" hidden><h2>대중교통 경로 비교</h2><div id="transitOptions" class="search-results"></div><h3>승차 정류장 실시간 버스</h3><p id="busStatus" class="message" role="status"></p><button id="refreshBus" class="secondary full" type="button">실시간 도착 정보 새로고침</button><div id="busArrivals"></div></section>
       <section id="routeSummary" class="route-summary" hidden aria-labelledby="summaryTitle">
-        <div class="section-heading"><h2 id="summaryTitle">선택한 경로</h2><span class="source-tag">카카오 도보</span></div>
+        <div class="section-heading"><h2 id="summaryTitle">선택한 경로</h2><span id="routeSource" class="source-tag">카카오 도보</span></div>
         <p id="routeNames" class="route-names"></p>
         <p id="routeCoverage" class="message" hidden></p>
         <div class="trip-stats"><div><strong id="routeMinutes">—</strong><span>예상 소요</span></div><div><strong id="routeDistance">—</strong><span>전체 거리</span></div><div><strong id="routeArrival">—</strong><span>지금 출발 시 도착</span></div></div>
@@ -43,7 +46,10 @@
         <div class="button-pair"><button id="previewRoute" type="button" class="secondary">경로 미리보기</button><button id="stopWalking" type="button" class="secondary" disabled>안내 종료</button></div>
         <p class="privacy-note">위치는 안내 중에만 사용하며 저장하지 않습니다. 미리보기는 위치를 사용하지 않습니다.</p>
       </section>
-      <footer class="panel-footer">크누패스 · 경북대학교 캠퍼스<br/>시간표 연동은 다음 단계에서 제공됩니다.</footer>
+      <section class="facilities-panel"><h2>도보 경로 주변 시설</h2><label for="facilityCategory">시설 종류</label><select id="facilityCategory"><option value="FD6">식당</option><option value="CE7">카페</option><option value="CS2">편의점</option></select><button id="searchNearby" type="button" class="secondary full">경로 주변 검색</button><p id="nearbyMessage" class="message" role="status">경로를 찾은 뒤 시설을 검색하세요.</p><div id="nearbyResults"></div></section>
+      <details class="metro-panel"><summary>대구 지하철 운행 시간표</summary><p class="subtext">시간표 기준이며 실시간 열차 위치가 아닙니다. 공휴일과 방향을 확인하세요.</p><form id="metroForm"><label for="metroStation">역 이름</label><input id="metroStation" required maxlength="30" placeholder="예: 동대구"/><label for="metroLine">호선</label><select id="metroLine"><option value="1">1호선</option><option value="2">2호선</option><option value="3">3호선</option></select><label for="metroDirection">열차 방향</label><select id="metroDirection"><option value="UP">상행 (UP)</option><option value="DOWN">하행 (DOWN)</option></select><label for="metroDay">운행일</label><select id="metroDay"><option value="WEEKDAY">평일</option><option value="SAT">토요일</option><option value="HOLIDAY">일요일·공휴일</option></select><button id="metroSearch" class="secondary full" type="submit">시간표 조회</button></form><p id="metroStatus" class="message" role="status"></p></details>
+      <details class="meals-panel"><summary>오늘의 캠퍼스 학식</summary><p class="subtext">캠퍼스 전체 식당입니다. 식당을 검색해 위치와 경로를 확인하세요.</p><button id="loadMeals" class="secondary full" type="button">오늘 메뉴 불러오기</button><p id="mealsStatus" class="message" role="status"></p><div id="mealsResults"></div></details>
+      <footer class="panel-footer">크누패스 · 경북대학교 캠퍼스<br/>시간표에서 수업을 선택해 이동을 준비하세요.</footer>
     </aside>
     <section class="map-pane" aria-label="경로 지도">
       <div id="map"></div>
@@ -57,5 +63,7 @@
   <script src="./src/geo-utils.js?v=20261010-1"></script>
   <script src="./src/pacemaker.js?v=20261010-1"></script>
   <script src="./src/app.js?v=20261010-1"></script>
+  <script src="./src/mobility-utils.js?v=20261010-2"></script>
+  <script src="./src/mobility.js?v=20261010-2"></script>
 </body>
 </html>

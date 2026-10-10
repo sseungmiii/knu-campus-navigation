@@ -1,4 +1,6 @@
 const {RouteError, fetchWalkingRoute, searchPlaces} = require('./routing.cjs');
+const mobility = require('./mobility.cjs');
+const {meals}=require('./meals.cjs');
 const origins = new Set(['https://knu-campus-navigation.vercel.app', 'https://sseungmiii.github.io']);
 const requests = new Map();
 function json(res, status, data) {
@@ -7,7 +9,7 @@ function json(res, status, data) {
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(data));
 }
-async function handleApi(kind, req, res, env = process.env, services = {fetchWalkingRoute, searchPlaces}) {
+async function handleApi(kind, req, res, env = process.env, services = {fetchWalkingRoute, searchPlaces, ...mobility, meals}) {
   const origin = req.headers.origin;
   res.setHeader('Vary', 'Origin');
   const localOrigin = env.VERCEL !== '1' && ['127.0.0.1:5174', 'localhost:5174'].includes(req.headers.host) && origin === `http://${req.headers.host}`;
@@ -16,7 +18,7 @@ async function handleApi(kind, req, res, env = process.env, services = {fetchWal
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
-  const search = kind === 'search';
+  const search = ['search','bus','metro','meals'].includes(kind);
   if (req.method !== (search ? 'GET' : 'POST')) {
     res.setHeader('Allow', search ? 'GET, OPTIONS' : 'POST, OPTIONS');
     return json(res, 405, {error: '요청 방식을 확인해주세요.'});
@@ -30,8 +32,8 @@ async function handleApi(kind, req, res, env = process.env, services = {fetchWal
   if (++entry.count > 20) return json(res, 429, {error: '요청이 많습니다. 1분 후 다시 시도해주세요.'});
   try {
     if (search) {
-      const keyword = new URL(req.url, 'https://localhost').searchParams.get('q');
-      return json(res, 200, await services.searchPlaces(keyword, env));
+      const query = new URL(req.url, 'https://localhost').searchParams;
+      return json(res, 200, kind === 'search' ? await services.searchPlaces(query.get('q'), env) : await services[kind](query, env));
     }
     if (Number(req.headers['content-length']) > 4096) throw new RouteError(413, 'TOO_LARGE', '요청이 너무 큽니다.');
     let input = req.body;
@@ -44,7 +46,7 @@ async function handleApi(kind, req, res, env = process.env, services = {fetchWal
     if (typeof input === 'string') {
       try { input = JSON.parse(input); } catch { throw new RouteError(400, 'INVALID_JSON', '요청 내용을 확인해주세요.'); }
     }
-    return json(res, 200, await services.fetchWalkingRoute(input, env));
+    return json(res, 200, kind === 'route' ? await services.fetchWalkingRoute(input, env) : await services[kind](input, env));
   } catch (error) {
     return json(res, error instanceof RouteError ? error.status : 500, {error: error instanceof RouteError ? error.message : '요청을 처리하지 못했습니다.', code: error instanceof RouteError ? error.code : 'SERVER_ERROR'});
   }

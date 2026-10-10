@@ -1,0 +1,34 @@
+const assert=require('node:assert/strict');
+const {normalizeTransit,matchStop,findSchedules,bus,nearby,metro,transit}=require('../server/mobility.cjs');
+const {departurePlan,nextTrain,busDeparture}=require('../src/mobility-utils.js');
+const {normalizeMeals}=require('../server/meals.cjs');
+const {nextOccurrence}=require('../lib/timetable.cjs');
+const at=Date.parse('2026-10-12T09:00:00+09:00');
+assert.equal(departurePlan('2026-10-12T10:00:00+09:00',1800,5,3,at).deadline,Date.parse('2026-10-12T09:22:00+09:00'));
+assert.equal(departurePlan('',1800,5,3,at),null);
+assert.equal(busDeparture([{route:'937',seconds:90},{route:'937',seconds:300}],['937'],[{duration:120},{duration:600}],1,new Date(at).toISOString(),at).deadline,at+120000);
+assert.equal(busDeparture([{route:'937',seconds:300}],['937'],[{duration:120},{duration:600}],1,new Date(at-61000).toISOString(),at),null);
+const menu=normalizeMeals({updated_at:'2026-10-12 08:00:00',days:['월(10/12)'],shops:['empty','full'],data:{full:{'월(10/12)':{중식:{items:['rice']}}}}},new Date(at));
+assert.equal(menu.restaurants[0].name,'full');assert.equal(menu.restaurants[1].meals.length,0);
+assert.deepEqual(nextTrain(['08:00','09:05','09:10','10:00'],at),['09:05','09:10','10:00']);
+assert.equal(nextOccurrence({weekday:1,start_minute:600,end_minute:660,starts_on:'2026-09-01',ends_on:'2026-12-31'},new Date(at)),'2026-10-12T01:00:00.000Z');
+assert.equal(matchStop('동대구역',[35.879173,128.626983]).id,'7011006700');
+assert.equal(matchStop('동대구역',[35,128]),null);
+assert.deepEqual(findSchedules({body:{row:{SCHEDULE:'5:25, 5:39'}}}),[{SCHEDULE:'5:25, 5:39'}]);
+assert.throws(()=>normalizeTransit({status:'NO_RESULTS'}));
+const routes=normalizeTransit({status:'OK',routes:[{properties:{totalTime:100,totalDistance:1000,transfers:0},steps:[{properties:{type:'BUS',time:100,stops:[{name:'동대구역'}],vehicles:[{name:'937'}]},path:{points:[[128.626983,35.879173],[128.63,35.88]]}}]}]});
+assert.equal(routes.routes[0].steps[0].boardingStop.id,'7011006700');
+(async()=>{
+  let called='';const response=data=>({ok:true,text:async()=>JSON.stringify(data),json:async()=>data});
+  const live=await bus(new URLSearchParams({stop:'7011006700'}),{DAEGU_BUS_API_KEY:'a%2Fb%2B%3D'},async url=>{called=url;return response({header:{resultCode:'0000'},body:{items:[{routeNo:'937',arrList:[{arrTime:165,routeNo:'937',bsGap:2,busTCd2:'D'}]}]}});});
+  assert.equal(new URL(called).searchParams.get('serviceKey'),'a/b+=');assert.equal(live.arrivals[0].seconds,165);
+  const connected=await transit({start:{name:'start',coords:[35.878,128.625]},end:{name:'end',coords:[35.881,128.632]}},{KAKAO_REST_API_KEY:'fake'},async url=>{
+    if(url.includes('publictraffic'))return response({status:'OK',routes:[{properties:{totalTime:100,totalDistance:1000,transfers:0},steps:[{properties:{type:'BUS',time:100,distance:1000,stops:[{name:'동대구역'},{name:'하차'}],vehicles:[{name:'937'}]},path:{points:[[128.626983,35.879173],[128.63,35.88]]}}]}]});
+    const p=new URL(url).searchParams;return response({status:'OK',route:{properties:{totalTime:300,totalDistance:400},legs:[{steps:[{properties:{distance:400},path:{points:[[Number(p.get('start_x')),Number(p.get('start_y'))],[Number(p.get('end_x')),Number(p.get('end_y'))]]}}]}]}});
+  });
+  assert.deepEqual(connected.routes[0].steps.map(s=>s.type),['WALKING','BUS','WALKING']);assert.equal(connected.routes[0].duration,700);assert.equal(connected.routes[0].connectionsComplete,true);
+  const facilities=await nearby({points:[[35.89,128.61],[35.891,128.61]],category:'CE7'},{KAKAO_REST_API_KEY:'fake'},async()=>response({documents:[{id:'1',place_name:'cafe',x:'128.6101',y:'35.8905',place_url:'https://place.map.kakao.com/1'},{id:'2',x:'129',y:'36'}]}));
+  assert.equal(facilities.places.length,1);assert.ok(facilities.places[0].offset<20);
+  await assert.rejects(()=>metro(new URLSearchParams({station:'동대구',line:'1',direction:'UP',day:'WEEKDAY'}),{},async()=>({ok:true,text:async()=>'<script>sabSignature</script>'})),/연결/);
+  console.log('PASS: transit geometry, correct boarding stop, key decoding, bus arrival units, route facilities, KST departure and schedule boundary');
+})().catch(e=>{console.error(e);process.exit(1);});

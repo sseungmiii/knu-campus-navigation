@@ -52,7 +52,7 @@ async function fetchWalkingRoute(input, env, request = fetch) {
 async function searchPlaces(keyword, env, request = fetch) {
   if (typeof keyword !== 'string' || !keyword.trim() || keyword.length > 100) throw new RouteError(400, 'INVALID_INPUT', '검색어를 입력해주세요.');
   if (!env.KAKAO_REST_API_KEY) throw new RouteError(503, 'NOT_CONFIGURED', '장소 검색 연결을 준비 중입니다.');
-  const query = new URLSearchParams({query: keyword.trim(), x: '128.6125', y: '35.89', sort: 'distance', size: '8'});
+  const query = new URLSearchParams({query: keyword.trim(), x: '128.6125', y: '35.89', sort: 'accuracy', size: '10'});
   let response;
   try { response = await request(`https://dapi.kakao.com/v2/local/search/keyword.json?${query}`, {headers: {Authorization: `KakaoAK ${env.KAKAO_REST_API_KEY}`}, signal: AbortSignal.timeout(10000)}); }
   catch { throw new RouteError(502, 'UPSTREAM_UNAVAILABLE', '장소 검색에 연결하지 못했습니다.'); }

@@ -11,6 +11,7 @@ function message(text, error = false) { $('routeMessage').textContent = text; $(
 function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`; }
 function updateReady() { $('findRoute').disabled = !map || !places.start || !places.end; }
 function clearRoute() {
+  if(typeof mobilityClear==='function')mobilityClear();
   routeGeneration++; routeController?.abort(); routeController = null;
   pacemaker?.stop(); selectedRoute = null; layers.splice(0).forEach(layer => layer.remove());
   $('routeSummary').hidden = $('pacePanel').hidden = true; $('mapEmptyHint').hidden = false;
@@ -55,6 +56,7 @@ async function findRoute(event) {
   clearRoute();
   if (!hasBackend) { message('현재 길찾기 연결을 준비 중입니다. 잠시 후 다시 시도해주세요.', true); return; }
   const start = {...places.start}, end = {...places.end};
+  if($('transportMode')?.value==='transit') {await transitSearch(start,end,routeGeneration);return;}
   if (metersBetween(start.coords, end.coords) < 5) { message('출발지와 도착지가 너무 가깝습니다.', true); return; }
   const generation = routeGeneration; routeController = new AbortController();
   const timeout = setTimeout(() => routeController?.abort(), 18000);
@@ -72,6 +74,7 @@ async function findRoute(event) {
     layers.push(map.marker(route.points[0], '<div class="nav-marker origin">출<span>보행 시작</span></div>'), map.marker(route.points.at(-1), '<div class="nav-marker destination">도<span>보행 안내 끝</span></div>'));
     map.fitPath(route.points); $('mapEmptyHint').hidden = true;
     $('routeNames').textContent = `${start.name} → ${end.name}`;
+    if($('routeSource'))$('routeSource').textContent='카카오 도보';
     const coverageNotes = [];
     if (route.startOffset > 30) coverageNotes.push(`검색한 출발 좌표와 보행 경로 시작점은 약 ${Math.round(route.startOffset)}m 떨어져 있습니다.`);
     if (route.endOffset > 30) coverageNotes.push(`제공된 보행 경로 끝에서 검색한 장소 좌표까지는 직선거리 약 ${Math.round(route.endOffset)}m입니다. 건물 출입구를 확인해주세요.`);
@@ -85,6 +88,7 @@ async function findRoute(event) {
     $('routeSummary').hidden = $('pacePanel').hidden = false;
     pacemaker.setRoute(selectedRoute); $('paceRemaining').textContent = formatDistance(metrics.total); updatePaceTime(metrics.total);
     message('경로를 지도에 표시했습니다. 아래에서 미리보기 또는 도보 안내를 시작하세요.');
+    if(typeof updateDeadline==='function')updateDeadline();
   } catch (error) {
     if (generation !== routeGeneration) return;
     message(error.name === 'AbortError' ? '경로 요청 시간이 초과됐습니다. 다시 시도해주세요.' : error.message || '경로를 찾지 못했습니다.', true);
@@ -150,6 +154,7 @@ window.addEventListener('message', event => {
   const place = event.data.place;
   if (typeof place?.name !== 'string' || !place.name.trim() || place.name.length > 150 || !Array.isArray(place.coords) || place.coords.length !== 2 || !place.coords.every(Number.isFinite) || Math.abs(place.coords[0]) > 90 || Math.abs(place.coords[1]) > 180) return;
   selectPlace('end', {name: place.name, coords: place.coords});
+  if(typeof updateDeadline==='function') {const at=Date.parse(event.data.classStart);$('classStart').value=Number.isFinite(at)?new Date(at+9*3600000).toISOString().slice(0,16):'';updateDeadline();}
   if (places.start) findRoute({preventDefault() {}});
   else message(`${place.name}을 도착지로 선택했습니다. 출발지 또는 현재 위치를 선택해주세요.`);
 });
