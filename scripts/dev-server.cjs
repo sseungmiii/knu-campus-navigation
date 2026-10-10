@@ -20,7 +20,7 @@ http.createServer(async (req, res) => {
   let relative;
   try { relative = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); }
   catch { return json(res, 400, {error: '잘못된 요청입니다.'}); }
-  if (relative === '/api/route' || relative === '/api/search') {
+  if (relative === '/api/route' || relative === '/api/walk' || relative === '/api/search') {
     const search = relative === '/api/search';
     if (req.method !== (search ? 'GET' : 'POST')) return json(res, 405, {error: '요청 방식을 확인해주세요.'});
     if (!search && !String(req.headers['content-type']).startsWith('application/json')) return json(res, 415, {error: 'JSON 요청이 필요합니다.'});

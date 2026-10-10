@@ -62,8 +62,8 @@ async function findRoute(event) {
   const timeout = setTimeout(() => routeController?.abort(), 18000);
   $('findRoute').disabled = true; $('findRoute').textContent = '경로 찾는 중…'; message('카카오 도보 경로를 찾고 있습니다.');
   try {
-    const response = await fetch(`${apiBase}/api/route`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({start, end, routeMode: $('routeMode').value}), signal: routeController.signal});
-    const route = await response.json();
+    const response = await fetch(`${apiBase}/api/walk`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({start, end, routeMode: $('routeMode').value}), signal: routeController.signal});
+    const route = await response.json().catch(() => { throw new Error('길찾기 서버에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'); });
     if (generation !== routeGeneration) return;
     if (!response.ok) throw new Error(route.error || '경로를 찾지 못했습니다.');
     const metrics = makeRouteMetrics(route.points);
