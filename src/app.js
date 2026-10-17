@@ -153,6 +153,8 @@ window.addEventListener('message', event => {
   if (event.data?.type !== 'knu:destination' || !map || !pacemaker) return;
   const place = event.data.place;
   if (typeof place?.name !== 'string' || !place.name.trim() || place.name.length > 150 || !Array.isArray(place.coords) || place.coords.length !== 2 || !place.coords.every(Number.isFinite) || Math.abs(place.coords[0]) > 90 || Math.abs(place.coords[1]) > 180) return;
+  if(typeof showPurpose==='function')showPurpose('route');
+  $('departurePanel').open=true;
   selectPlace('end', {name: place.name, coords: place.coords});
   if(typeof updateDeadline==='function') {const at=Date.parse(event.data.classStart);$('classStart').value=Number.isFinite(at)?new Date(at+9*3600000).toISOString().slice(0,16):'';updateDeadline();}
   if (places.start) findRoute({preventDefault() {}});

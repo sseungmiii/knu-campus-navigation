@@ -92,16 +92,5 @@ async function nearby(input,env,request=fetch) {
   }
   return {places:[...unique.values()].sort((a,b)=>a.offset-b.offset).slice(0,15),source:'카카오 장소 검색',note:'경로 주변 일부 지점을 검색합니다. 추가 시간은 직선거리 기준 왕복 도보 추정이며 영업 여부는 확인이 필요합니다.'};
 }
-function findSchedules(value,result=[]) {
-  if(Array.isArray(value))value.forEach(v=>findSchedules(v,result));
-  else if(value&&typeof value==='object'){if(typeof value.SCHEDULE==='string')result.push(value);else Object.values(value).forEach(v=>findSchedules(v,result));} return result;
-}
-async function metro(query,env,request=fetch) {
-  const station=query.get('station'), line=query.get('line'), direction=query.get('direction'), day=query.get('day');
-  if(!station||station.length>30||!/^[가-힣a-zA-Z0-9 ]+$/.test(station)||!['1','2','3'].includes(line)||!['UP','DOWN'].includes(direction)||!['WEEKDAY','SAT','HOLIDAY'].includes(day))throw new RouteError(400,'INVALID_INPUT','역·호선·방향·운행일을 선택해주세요.');
-  const params=new URLSearchParams({STT_NM:station.replace(/역$/,''),LINE_NO:line,SCHEDULE_METH:direction,SCHEDULE_TYPE:day});
-  const raw=await read(`https://www.dtro.or.kr/open_content_new/ko/OpenApi/stationTime.php?${params}`,{},request);
-  const rows=findSchedules(raw); if(!rows.length)throw new RouteError(502,'METRO_UNAVAILABLE','공식 지하철 시간표를 읽지 못했습니다. 현재 경로는 카카오 예상 시간으로 표시됩니다.');
-  return {station,line,direction,day,times:[...new Set(rows.flatMap(row=>row.SCHEDULE.match(/\b(?:[01]?\d|2[0-4]):[0-5]\d\b/g)||[]))],source:'대구교통공사 운행 시간표 · 실시간 아님',updatedAt:new Date().toISOString()};
-}
+const {metro,findSchedules}=require('./metro.cjs');
 module.exports={transit,bus,nearby,metro,normalizeTransit,matchStop,findSchedules};

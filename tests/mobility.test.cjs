@@ -29,6 +29,6 @@ assert.equal(routes.routes[0].steps[0].boardingStop.id,'7011006700');
   assert.deepEqual(connected.routes[0].steps.map(s=>s.type),['WALKING','BUS','WALKING']);assert.equal(connected.routes[0].duration,700);assert.equal(connected.routes[0].connectionsComplete,true);
   const facilities=await nearby({points:[[35.89,128.61],[35.891,128.61]],category:'CE7'},{KAKAO_REST_API_KEY:'fake'},async()=>response({documents:[{id:'1',place_name:'cafe',x:'128.6101',y:'35.8905',place_url:'https://place.map.kakao.com/1'},{id:'2',x:'129',y:'36'}]}));
   assert.equal(facilities.places.length,1);assert.ok(facilities.places[0].offset<20);
-  await assert.rejects(()=>metro(new URLSearchParams({station:'동대구',line:'1',direction:'UP',day:'WEEKDAY'}),{},async()=>({ok:true,text:async()=>'<script>sabSignature</script>'})),/연결/);
+  await assert.rejects(()=>metro(new URLSearchParams({station:'동대구',line:'1',direction:'UP',day:'WEEKDAY'}),{},async()=>({ok:true,text:async()=>'<script>sabSignature</script>'})),error=>error.status===502);
   console.log('PASS: transit geometry, correct boarding stop, key decoding, bus arrival units, route facilities, KST departure and schedule boundary');
 })().catch(e=>{console.error(e);process.exit(1);});

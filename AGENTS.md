@@ -15,3 +15,13 @@
 - Use only SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY for user-scoped Supabase clients; server clients forward verified user sessions and remain subject to RLS. Secret/service-role keys are not used. Two allowed Auth UUIDs live in private.schedule_users, with slots 1 and 2, never in editable user metadata.
 - SQL migration and two-user assignment must be applied before live timetable persistence is claimed. Until the owner chooses test accounts, preserve the empty allowlist and deny access. Node.js 22+ is required; run npm ci, npm run check, npm test and npm run build.
 - Daegu mobility: server/mobility.cjs, server/meals.cjs, src/mobility.js and src/mobility-utils.js. DAEGU_BUS_API_KEY is server-only. Keep real-time arrival timestamps and stale handling; never claim timetable data is real-time or incomplete walking connections are full door-to-door coverage. Setup and current upstream limitations: docs/mobility-setup.md.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
