@@ -61,7 +61,7 @@ function renderTransitOptions() {
   const candidates=transitCandidates(routes,transitType,$('transitSort').value);
   for(const button of $('transitFilters').querySelectorAll('button')){
     const type=button.dataset.transitType,count=type==='ALL'?routes.length:routes.filter(route=>transitMetrics(route).type===type).length;
-    button.textContent=`${{ALL:'전체',BUS:'버스',SUBWAY:'지하철',BUS_AND_SUBWAY:'버스+지하철'}[type]} ${count}`;
+    button.replaceChildren(textNode('span',{ALL:'전체',BUS:'버스',SUBWAY:'지하철',BUS_AND_SUBWAY:'버스+지하철'}[type],'transit-filter-name'),textNode('span',String(count),'transit-filter-count'));
     button.setAttribute('aria-pressed',String(type===transitType));
   }
   $('transitCount').textContent=`${candidates.length}개 경로`;$('transitOptions').replaceChildren();

@@ -24,7 +24,7 @@ vm.runInContext(fs.readFileSync(require.resolve('../src/mobility.js'),'utf8'),co
   await context.transitSearch({name:'출발'},{name:'도착'},1);
   assert.equal($('transitOptions').children.length,2);assert.equal(context.selectedRoute.providerRank,1);
   assert.equal($('transitOptions').children[0].attrs['aria-pressed'],'true');
-  assert.equal($('transitFilters').children[1].textContent,'버스 1');
+  assert.deepEqual($('transitFilters').children[1].children.map(child=>child.textContent),['버스','1']);
   $('transitSort').value='TIME';$('transitSort').onchange();assert.equal(context.selectedRoute.providerRank,0);
   assert.ok(drawn.some(options=>options.color==='#28a647'));assert.ok(drawn.some(options=>options.dashArray==='6,6'));
   $('transitFilters').children[2].onclick();assert.equal(context.selectedRoute,null);assert.equal($('routeSummary').hidden,true);assert.equal($('refreshBus').disabled,true);
