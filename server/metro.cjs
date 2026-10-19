@@ -35,7 +35,7 @@ async function metro(query, env, request = fetch) {
   const line = query.get('line') || 'auto', direction = query.get('direction') || 'BOTH', day = !query.get('day')||query.get('day')==='auto'?calendar.day:query.get('day');
   if (!station || station.length > 30 || !/^[가-힣a-zA-Z0-9 ]+$/.test(station) || !['auto','1','2','3'].includes(line) || !['UP','DOWN','BOTH'].includes(direction) || !['WEEKDAY','SAT','HOLIDAY'].includes(day)) throw new RouteError(400, 'INVALID_INPUT', '역·호선·방향·운행일을 선택해주세요.');
   if(direction==='BOTH'){
-    const lines=['1','2','3'];
+    const lines=line==='auto'?['1','2','3']:[line];
     const results=await Promise.all(lines.map(async candidate=>{
       const directions=await Promise.all(['DOWN','UP'].map(async heading=>{
         const lookup=new URLSearchParams({station,line:candidate,direction:heading,day});
@@ -48,7 +48,7 @@ async function metro(query, env, request = fetch) {
     const incomplete=results.some(result=>result.directions.some(item=>item.unavailable));
     const selected=line==='auto'?found[0]:found.find(item=>item.line===line);
     if(!selected)throw new RouteError(incomplete?502:404,incomplete?'UPSTREAM_UNAVAILABLE':'NO_TIMETABLE',incomplete?'지하철 시간표 서버에 연결하지 못했습니다. 잠시 후 다시 조회해주세요.':'역 이름에 해당하는 시간표가 없습니다. 정확한 역 이름과 호선을 확인해주세요.');
-    return {station,line:selected.line,...calendar,day,directions:selected.directions,availableLines:found.map(item=>item.line),lineLookupIncomplete:incomplete,updatedAt:new Date().toISOString()};
+    return {station,line:selected.line,...calendar,day,directions:selected.directions,...(line==='auto'?{availableLines:found.map(item=>item.line)}:{}),lineLookupIncomplete:incomplete,updatedAt:new Date().toISOString()};
   }
   if (line === 'auto') {
     const results = await Promise.allSettled(['1','2','3'].map(candidate => {

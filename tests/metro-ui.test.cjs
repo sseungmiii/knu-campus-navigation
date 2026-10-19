@@ -40,6 +40,9 @@ $('metroStation').value='반월당';$('metroLine').value='auto';
   now+=1000;tick();assert.match(text($('metroCountdown')),/0분 01초/);
   now+=2000;tick();assert.doesNotMatch(text($('metroCountdown')),/09:00:02/);
   assert.match(text($('metroCountdown')),/4분 57초/);
+  context.fetch=async()=>({ok:true,json:async()=>({...data,availableLines:undefined})});
+  await context.searchMetro({preventDefault(){}});
+  assert.deepEqual($('metroLine').children.map(option=>option.value),['1','2'],'Switching lines retains transfer choices without searching other lines again');
   // A reply for the previous station must not repopulate results after editing.
   context.fetch=()=>new Promise(resolve=>{resolveFetch=resolve;});
   const pending=context.searchMetro({preventDefault(){}});

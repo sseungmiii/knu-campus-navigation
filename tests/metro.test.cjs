@@ -39,7 +39,7 @@ assert.throws(() => normalizeMetro('<html>error</html>',input), error => error.s
   assert.equal(both.directions[0].trains.length,0);assert.equal(both.directions[1].trains.length,3);
   const line2=await metro(new URLSearchParams({station:'동대구',line:'2',direction:'BOTH',day:'WEEKDAY'}),{},async()=>({ok:true,text:async()=>transferXml}));
   assert.deepEqual(line2.directions.map(item=>item.heading),['영남대','문양']);
-  assert.deepEqual(line2.availableLines,['1','2'],'Transfer choices remain available after switching lines');
+  assert.equal(line2.availableLines,undefined,'An explicit line lookup preserves the previously discovered transfer choices');
   const today=await metro(new URLSearchParams({mode:'day'}),{},()=>{throw Error('Day selection must not call upstream');});
   assert.match(today.serviceDate,/^\d{4}-\d{2}-\d{2}$/);assert.ok(['WEEKDAY','SAT','HOLIDAY'].includes(today.day));
   await assert.rejects(()=>metro(new URLSearchParams({...input,station:'<bad>'}),{},()=>{throw Error('must not fetch');}),error=>error.status===400);
