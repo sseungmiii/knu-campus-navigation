@@ -47,7 +47,7 @@ function createKakaoMap() {
     removeLayer: object => object.remove(),
     polygon: (points, options) => layer(new kakao.maps.Polygon({path: points.map(coord), strokeColor: options.color, strokeWeight: options.weight, strokeStyle: 'dash', fillColor: options.fillColor, fillOpacity: options.fillOpacity})),
     polyline: (points, options) => layer(new kakao.maps.Polyline({path: points.map(coord), strokeColor: options.color, strokeWeight: options.weight, strokeOpacity: options.opacity, strokeStyle: options.dashArray ? 'dash' : 'solid'})),
-    marker: (point, html) => layer(new kakao.maps.CustomOverlay({position: coord(point), content: html, xAnchor: 0, yAnchor: 0, zIndex: 5})),
+    marker: (point, html) => layer(new kakao.maps.CustomOverlay({position: coord(point), content: html, xAnchor: 0, yAnchor: 0, zIndex: html?.classList?.contains('selected-campus-pin') ? 20 : html?.classList?.contains('pin-meal') ? 8 : 5})),
     fitPath: points => {
       fittedPath = points;
       fit(points);

@@ -6,7 +6,7 @@ const campusDining = [
   {id:'meal-gp',name:'GP감꽃식당',building:'경북대학교 글로벌플라자',coords:[35.8918682645968,128.611259363988]},
   {id:'meal-engineering',name:'공학관 학생·교직원식당',building:'경북대학교 공대12호관',coords:[35.8884795795739,128.609945976963]}
 ].map(p=>({...p,category:'meal',address:'대구 북구 대학로 80'}));
-let campusFacilities=[...campusDining],campusPins=[],campusFilter='all',campusSearchGeneration=0;
+let campusFacilities=[...campusDining],campusPins=[],campusFilter='all',campusSearchGeneration=0,campusSelectedPin=null;
 const campusCategoryNames={meal:'학식당',CE7:'카페',CS2:'편의점'},campusIcons={meal:'♧',CE7:'☕',CS2:'▣'};
 function campusDestination(place,kind='end') {
   showPurpose('route');selectPlace(kind,{...place,name:place.building||place.name});
@@ -15,7 +15,8 @@ function campusDestination(place,kind='end') {
 function campusMealPlace(name) {return campusDining.find(p=>p.building===mealLocationQuery(name));}
 function openCampusPlace(place) {
   const box=$('campusPlaceCard');box.replaceChildren();box.hidden=false;map.panTo(place.coords);
-  const close=textNode('button','×','place-close');close.type='button';close.setAttribute('aria-label','장소 정보 닫기');close.onclick=()=>box.hidden=true;
+  campusSelectedPin?.remove();const selected=textNode('div',place.name,'selected-campus-pin');campusSelectedPin=map.marker(place.coords,selected);
+  const close=textNode('button','×','place-close');close.type='button';close.setAttribute('aria-label','장소 정보 닫기');close.onclick=()=>{box.hidden=true;campusSelectedPin?.remove();};
   box.append(close,textNode('span',campusCategoryNames[place.category]||'캠퍼스 장소','place-category'),textNode('h2',place.name),textNode('p',place.building||place.address||'경북대학교 대구캠퍼스'));
   const actions=textNode('div','','place-actions');
   for(const [kind,label] of [['start','출발'],['end','도착 · 길찾기']]){const button=textNode('button',label,kind==='end'?'primary':'secondary');button.type='button';button.onclick=()=>campusDestination(place,kind);actions.append(button);}
@@ -40,16 +41,16 @@ async function loadCampusFacilities() {
 }
 function initCampusExplorer() {
   const home=()=>map.campusHome ? map.campusHome() : map.fitPath([[35.885,128.607],[35.893,128.617]]);
-  $('campusHome').onclick=()=>{document.body.classList.remove('panel-open');$('campusPlaceCard').hidden=true;home();};
+  $('campusHome').onclick=()=>{document.body.classList.remove('panel-open');$('campusPlaceCard').hidden=true;campusSelectedPin?.remove();home();};
   $('closePanel').onclick=()=>document.body.classList.remove('panel-open');
   document.querySelectorAll('[data-open-purpose]').forEach(button=>button.onclick=()=>{showPurpose(button.dataset.openPurpose);$('campusPlaceCard').hidden=true;if(button.dataset.openPurpose==='meals'&&!$('mealsResults').children.length)$('loadMeals').click();});
-  document.querySelectorAll('[data-campus-filter]').forEach(button=>button.onclick=()=>{campusFilter=button.dataset.campusFilter;document.querySelectorAll('[data-campus-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));$('campusPlaceCard').hidden=true;renderCampusPins();});
+  document.querySelectorAll('[data-campus-filter]').forEach(button=>button.onclick=()=>{document.body.classList.remove('panel-open');campusSelectedPin?.remove();campusFilter=button.dataset.campusFilter;document.querySelectorAll('[data-campus-filter]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));$('campusPlaceCard').hidden=true;renderCampusPins();});
   $('campusSearch').oninput=()=>{campusSearchGeneration++;$('campusSearchResults').hidden=true;};
   $('campusSearchForm').onsubmit=async event=>{
     event.preventDefault();const query=$('campusSearch').value.trim();if(!query)return;
     const generation=++campusSearchGeneration,box=$('campusSearchResults');box.hidden=false;box.textContent='장소 검색 중…';
     try{const response=await fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}`,{signal:AbortSignal.timeout(15000)});const data=await response.json();if(generation!==campusSearchGeneration)return;if(!response.ok)throw new Error(data.error);
-      box.replaceChildren();const close=textNode('button','검색 결과 닫기','secondary');close.onclick=()=>box.hidden=true;box.append(close);
+      box.replaceChildren();const close=textNode('button','검색 결과 닫기','secondary');close.onclick=()=>{box.hidden=true;campusSelectedPin?.remove();};box.append(close);
       if(!data.places.length)box.append(textNode('p','검색 결과가 없습니다.'));
       for(const place of data.places){const button=textNode('button','','place-option');button.append(textNode('strong',place.name),textNode('span',place.address));button.onclick=()=>{box.hidden=true;openCampusPlace(place);};box.append(button);}
     }catch(error){if(generation===campusSearchGeneration)box.textContent=error.message||'장소를 조회하지 못했습니다.';}
