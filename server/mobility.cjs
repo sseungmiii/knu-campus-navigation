@@ -25,7 +25,7 @@ function normalizeTransit(data) {
     const steps = list(route.steps).map(step => {
       const p=step.properties || {}, points=list(step.path?.points).map(xy=>[xy[1],xy[0]]);
       if (!['BUS','SUBWAY','WALKING'].includes(p.type) || points.length < 2 || !points.every(validPoint) || !Number.isFinite(p.time) || p.time < 0) throw new RouteError(502,'INVALID_ROUTE','대중교통 경로 데이터가 올바르지 않습니다.');
-      return {type:p.type, text:String(p.guidance || ''), duration:p.time, distance:p.distance, points, stops:list(p.stops).map(s=>String(s.name)), vehicles:list(p.vehicles).map(v=>String(v.name)),vehicleDetails:list(p.vehicles).map(v=>({name:String(v.name),type:String(v.type||'')})), boardingStop:p.type === 'BUS' ? matchStop(p.stops?.[0]?.name,points[0]) : null};
+      return {type:p.type, text:String(p.guidance || ''), duration:p.time, distance:p.distance, points, stops:list(p.stops).map(s=>String(s.name)), vehicles:[...new Set(list(p.vehicles).map(v=>String(v.name)))],vehicleDetails:[...new Map(list(p.vehicles).map(v=>[`${v.name}:${v.type||''}`,{name:String(v.name),type:String(v.type||'')}])).values()], boardingStop:p.type === 'BUS' ? matchStop(p.stops?.[0]?.name,points[0]) : null};
     });
     const duration=route.properties?.totalTime;
     if(!steps.length || !Number.isFinite(duration) || duration<=0) throw new RouteError(502,'INVALID_ROUTE','경로 소요 시간이 없습니다.');

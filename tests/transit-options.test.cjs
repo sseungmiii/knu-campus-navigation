@@ -26,5 +26,7 @@ assert.equal(normalized.routes.length,8,'Do not discard later routes before user
 assert.deepEqual(normalized.routes.map(route=>route.providerRank),[0,1,2,3,4,5,6,7]);
 assert.equal(transitCandidates(normalized.routes)[0].providerRank,7,'Previously truncated direct route is selectable first');
 assert.equal(normalized.routes[0].steps[0].vehicleDetails[0].type,'간선');
+const repeated=structuredClone(source);repeated.routes[0].steps[0].properties.vehicles.push({name:'937',type:'간선'});
+assert.deepEqual(normalizeTransit(repeated).routes[0].steps[0].vehicles,['937']);
 assert.throws(()=>normalizeTransit({status:'OK',routes:[]}),error=>error.code==='NO_ROUTE');
 console.log('PASS: all transit candidates retained, direct route priority, provider order, mode filters, four sorts, unknown walking and per-mode/line colors');

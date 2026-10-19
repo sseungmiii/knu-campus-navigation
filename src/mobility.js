@@ -46,9 +46,10 @@ function transitCard(route,fastest) {
   for(const step of route.steps){
     const style=transitStepStyle(step),row=textNode('span','','transit-card-step'),chip=textNode('span',style.label,'transit-chip');chip.style.backgroundColor=style.color;chip.style.color=style.textColor;row.append(chip);
     const ride=step.type!=='WALKING';
-    const names=ride?(step.vehicles?.join(' / ')||style.label):transitDuration(step.duration);
+    const vehicles=[...new Set(step.vehicles||[])];
+    const names=ride?(vehicles.length?vehicles.slice(0,3).join(' / ')+(vehicles.length>3?` 외 ${vehicles.length-3}개`:''):style.label):transitDuration(step.duration);
     const stops=ride&&step.stops?.length?`${step.stops[0]} → ${step.stops.at(-1)}`:step.text||'';
-    const description=textNode('span','','transit-step-description');description.append(textNode('strong',names),textNode('span',stops));row.append(description);details.append(row);
+    const description=textNode('span','','transit-step-description'),name=textNode('strong',names);if(ride)name.title=vehicles.join(' / ');description.append(name,textNode('span',stops));row.append(description);details.append(row);
   }
   button.append(details);
   if(route.connectionsComplete===false)button.append(textNode('span','일부 도보 연결 미확인 · 실제 이동시간이 더 길 수 있습니다.','transit-card-note'));
