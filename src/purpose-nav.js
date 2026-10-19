@@ -1,6 +1,7 @@
 function showPurpose(name, focus = false) {
   const tab = document.getElementById(`tab-${name}`);
   if (!tab) return;
+  document.body.classList.add('panel-open');
   document.querySelectorAll('[data-view]').forEach(button => {
     const active = button === tab;
     button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;

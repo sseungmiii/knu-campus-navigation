@@ -143,6 +143,7 @@ async function init() {
     map.setType(sky); $('mapTypeRoad').classList.toggle('active', !sky); $('mapTypeSky').classList.toggle('active', sky); $('mapTypeRoad').setAttribute('aria-pressed', String(!sky)); $('mapTypeSky').setAttribute('aria-pressed', String(sky));
   };
   map = await createCampusMap(); pacemaker = new RoutePacemaker(map, updatePace);
+  if (typeof initCampusExplorer === 'function') initCampusExplorer();
   window.addEventListener('pagehide', () => pacemaker.stop());
   updateReady();
   window.parent.postMessage({type: 'knu:map-ready'}, location.origin);

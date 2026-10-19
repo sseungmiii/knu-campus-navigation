@@ -41,6 +41,7 @@ function createKakaoMap() {
   }
   const view = {
     provider: 'kakao',
+    campusHome: () => {fittedPath=null;native.setLevel(4);native.setCenter(coord([35.889,128.612]));},
     panTo: point => native.panTo(coord(point)),
     setType: sky => native.setMapTypeId(sky ? kakao.maps.MapTypeId.HYBRID : kakao.maps.MapTypeId.ROADMAP),
     removeLayer: object => object.remove(),
@@ -51,6 +52,16 @@ function createKakaoMap() {
       fittedPath = points;
       fit(points);
     },
+    campusPlaces: category => Promise.all(['128.603,35.883,128.612,35.889','128.612,35.883,128.621,35.889','128.603,35.889,128.612,35.895','128.612,35.889,128.621,35.895'].map(rect => new Promise((resolve, reject) => {
+      const service = new kakao.maps.services.Places(), results = [];
+      const callback = (items, status, pagination) => {
+        if (status === kakao.maps.services.Status.ZERO_RESULT) return resolve([]);
+        if (status !== kakao.maps.services.Status.OK) return reject(new Error('교내 시설을 불러오지 못했습니다. 다시 시도해주세요.'));
+        results.push(...items.filter(p => /대학로 80(?:\s|$)|산격동 1370(?:-1)?(?:\s|$)/.test(p.road_address_name+' '+p.address_name)).map(p => ({id:p.id,name:p.place_name,coords:[Number(p.y),Number(p.x)],address:p.road_address_name||p.address_name,category})));
+        if (pagination.hasNextPage) pagination.nextPage(); else resolve(results);
+      };
+      service.categorySearch(category, callback, {rect,size:15});
+    }))).then(groups=>[...new Map(groups.flat().map(p=>[p.id,p])).values()]),
     search: keyword => new Promise((resolve, reject) => {
       new kakao.maps.services.Places().keywordSearch(keyword, (places, status) => {
         if (status === kakao.maps.services.Status.ZERO_RESULT) return resolve([]);

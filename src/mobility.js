@@ -233,7 +233,7 @@ window.addEventListener('DOMContentLoaded',()=>{
         if(!restaurant.meals.length)card.appendChild(textNode('p','식단정보가 없습니다.'));
         for(const meal of restaurant.meals)card.appendChild(textNode('p',`${meal.type}${meal.time?' · '+meal.time:''}: ${meal.items.join(', ')}`));
         const locationQuery=mealLocationQuery(restaurant.name);card.append(textNode('p',locationQuery,'meal-building'));
-        const button=textNode('button','식당 위치 검색','secondary');button.type='button';button.onclick=()=>{showPurpose('route',true);$('endQuery').value=locationQuery;search('end');};card.appendChild(button);$('mealsResults').appendChild(card);
+        const button=textNode('button','지도에서 보기 · 길찾기','secondary');button.type='button';button.onclick=()=>{const place=typeof campusMealPlace === 'function' ? campusMealPlace(restaurant.name) : null;if(place){document.body.classList.remove('panel-open');openCampusPlace(place);}else{showPurpose('route',true);$('endQuery').value=locationQuery;search('end');}};card.appendChild(button);$('mealsResults').appendChild(card);
       }
     }catch(error){$('mealsStatus').textContent=error.message||'학식 정보를 불러오지 못했습니다.';}finally{$('loadMeals').disabled=false;}
   };
