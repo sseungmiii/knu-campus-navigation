@@ -38,4 +38,33 @@ function busDeparture(arrivals,vehicles,steps,busIndex,fetchedAt,now=Date.now())
   const bus=arrivals.filter(a=>vehicles.includes(a.route)&&Number.isFinite(a.seconds)&&fetched+a.seconds*1000>=now+(approach+60)*1000).sort((a,b)=>a.seconds-b.seconds)[0];
   return bus?{route:bus.route,deadline:fetched+(bus.seconds-approach-60)*1000,arrival:fetched+(bus.seconds+after)*1000}:null;
 }
-if(typeof module!=='undefined')module.exports={departurePlan,nextTrain,upcomingTrains,metroServiceDate,metroDirectionName,mealLocationQuery,busDeparture};
+function transitMetrics(route) {
+  const rides=route.steps.filter(step=>step.type!=='WALKING'),walking=route.steps.filter(step=>step.type==='WALKING');
+  const hasBus=rides.some(step=>step.type==='BUS'),hasSubway=rides.some(step=>step.type==='SUBWAY');
+  return {type:hasBus&&hasSubway?'BUS_AND_SUBWAY':hasBus?'BUS':hasSubway?'SUBWAY':'WALKING',
+    transfers:Number.isInteger(route.transfers)&&route.transfers>=0?route.transfers:Math.max(0,rides.length-1),
+    walkingSeconds:walking.reduce((sum,step)=>sum+step.duration,0),
+    walkingDistance:route.connectionsComplete!==false&&walking.every(step=>Number.isFinite(step.distance)&&step.distance>=0)?walking.reduce((sum,step)=>sum+step.distance,0):null};
+}
+function transitCandidates(routes,type='ALL',sort='TRANSFERS') {
+  const value=route=>{
+    const metrics=transitMetrics(route),rank=Number.isInteger(route.providerRank)?route.providerRank:routes.indexOf(route);
+    const walk=metrics.walkingDistance===null?Infinity:metrics.walkingDistance;
+    return sort==='RECOMMENDED'?[rank]:sort==='TIME'?[route.duration,metrics.transfers,walk,rank]:sort==='WALK'?[walk,metrics.walkingSeconds,metrics.transfers,route.duration,rank]:[metrics.transfers,route.duration,walk,rank];
+  };
+  return routes.filter(route=>type==='ALL'||transitMetrics(route).type===type).slice().sort((a,b)=>{
+    const left=value(a),right=value(b);for(let index=0;index<left.length;index++)if(left[index]!==right[index])return left[index]<right[index]?-1:1;return 0;
+  });
+}
+function transitStepStyle(step) {
+  if(step.type==='WALKING')return {color:'#eceff3',mapColor:'#929aa6',textColor:'#526075',label:'도보'};
+  if(step.type==='SUBWAY'){
+    const line=(step.vehicles||[]).join('/').match(/([123])호선/);
+    const color=({'1':'#d93f40','2':'#28a647','3':'#ad7f00'})[line?.[1]]||'#7b3fc6';
+    return {color,mapColor:color,textColor:'#fff',label:line?`${line[1]}호선`:'지하철'};
+  }
+  const type=step.vehicleDetails?.[0]?.type;
+  const color=({간선:'#304b8e',지선:'#27845a',급행:'#d9434b',순환:'#198787'})[type]||'#304b8e';
+  return {color,mapColor:color,textColor:'#fff',label:'버스'};
+}
+if(typeof module!=='undefined')module.exports={departurePlan,nextTrain,upcomingTrains,metroServiceDate,metroDirectionName,mealLocationQuery,busDeparture,transitMetrics,transitCandidates,transitStepStyle};

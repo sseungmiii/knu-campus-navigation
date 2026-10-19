@@ -20,17 +20,17 @@ function matchStop(name, point) {
   return candidates[0]?.offset <= 100 && (!candidates[1] || candidates[1].offset-candidates[0].offset > 15) ? candidates[0] : null;
 }
 function normalizeTransit(data) {
-  if (data.status !== 'OK' || !Array.isArray(data.routes)) throw new RouteError(422,'NO_ROUTE','대중교통 경로를 찾지 못했습니다.');
-  const routes = data.routes.map(route => {
+  if (data.status !== 'OK' || !Array.isArray(data.routes) || !data.routes.length) throw new RouteError(422,'NO_ROUTE','대중교통 경로를 찾지 못했습니다.');
+  const routes = data.routes.map((route,providerRank) => {
     const steps = list(route.steps).map(step => {
       const p=step.properties || {}, points=list(step.path?.points).map(xy=>[xy[1],xy[0]]);
       if (!['BUS','SUBWAY','WALKING'].includes(p.type) || points.length < 2 || !points.every(validPoint) || !Number.isFinite(p.time) || p.time < 0) throw new RouteError(502,'INVALID_ROUTE','대중교통 경로 데이터가 올바르지 않습니다.');
-      return {type:p.type, text:String(p.guidance || ''), duration:p.time, distance:p.distance, points, stops:list(p.stops).map(s=>String(s.name)), vehicles:list(p.vehicles).map(v=>String(v.name)), boardingStop:p.type === 'BUS' ? matchStop(p.stops?.[0]?.name,points[0]) : null};
+      return {type:p.type, text:String(p.guidance || ''), duration:p.time, distance:p.distance, points, stops:list(p.stops).map(s=>String(s.name)), vehicles:list(p.vehicles).map(v=>String(v.name)),vehicleDetails:list(p.vehicles).map(v=>({name:String(v.name),type:String(v.type||'')})), boardingStop:p.type === 'BUS' ? matchStop(p.stops?.[0]?.name,points[0]) : null};
     });
     const duration=route.properties?.totalTime;
     if(!steps.length || !Number.isFinite(duration) || duration<=0) throw new RouteError(502,'INVALID_ROUTE','경로 소요 시간이 없습니다.');
-    return {mode:'transit',duration,distance:route.properties.totalDistance,transfers:route.properties.transfers,fare:route.properties.fare?.value,steps};
-  }).sort((a,b)=>a.duration-b.duration).slice(0,5);
+    return {mode:'transit',providerRank,duration,distance:route.properties.totalDistance,transfers:route.properties.transfers,fare:route.properties.fare?.value,steps};
+  });
   return {routes,source:'카카오 대중교통 예상',updatedAt:new Date().toISOString()};
 }
 async function transit(input,env,request=fetch) {
@@ -63,7 +63,7 @@ async function transit(input,env,request=fetch) {
       route.durationNote='카카오 전체 예상 시간과 확인된 개별 이동 시간 중 큰 값을 사용합니다. 환승 대기는 실제 운행에 따라 달라집니다.';
     }catch{route.connectionsComplete=false;route.durationNote='승하차 지점까지 도보 연결을 확인하지 못했습니다. 표시 시간에 누락 구간이 있을 수 있습니다.';}
   }));
-  result.routes.sort((a,b)=>a.duration-b.duration);return result;
+  return result;
 }
 async function bus(query,env,request=fetch) {
   const stop=stopData.stops.find(s=>s.id===query.get('stop')); if(!stop) throw new RouteError(400,'INVALID_INPUT','정류장을 확인해주세요.');

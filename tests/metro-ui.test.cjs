@@ -8,6 +8,7 @@ class Element {
   appendChild(child){this.append(child);}
   replaceChildren(...children){this.children=children;}
   requestSubmit(){this.submitted=(this.submitted||0)+1;}
+  querySelectorAll(){return [];}
 }
 const $=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
 const text=node=>[node.textContent,...node.children.map(text)].join(' ');

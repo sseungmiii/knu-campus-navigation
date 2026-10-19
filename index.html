@@ -33,7 +33,16 @@
         <p id="routeMessage" class="message" role="status">출발지와 도착지를 검색 결과에서 선택해주세요.</p>
       </section>
       <details id="departurePanel" class="departure-panel"><summary id="departureTitle">수업에 맞춰 출발 시간 계산<span class="summary-hint">수업 시각 · 여유 시간</span></summary><label for="classStart">수업 시작 · 한국 시각</label><input id="classStart" type="datetime-local"/><div class="button-pair"><label for="indoorMinutes">건물 내부 이동(분)<input id="indoorMinutes" type="number" min="0" max="30" value="3"/></label><label for="safetyMinutes">여유 시간(분)<input id="safetyMinutes" type="number" min="0" max="60" value="5"/></label></div><p id="deadlineStatus" class="message" role="status">수업 시각과 경로를 선택하면 출발 마감 시각을 계산합니다.</p></details>
-      <section id="transitPanel" hidden><h2>대중교통 경로 비교</h2><div id="transitOptions" class="search-results"></div><h3>승차 정류장 실시간 버스</h3><p id="busStatus" class="message" role="status"></p><button id="refreshBus" class="secondary full" type="button">실시간 도착 정보 새로고침</button><div id="busArrivals"></div></section>
+      <section id="transitPanel" hidden>
+        <h2>대중교통 경로 비교</h2>
+        <div id="transitFilters" class="transit-filters" role="group" aria-label="대중교통 종류">
+          <button type="button" data-transit-type="ALL" aria-pressed="true">전체</button><button type="button" data-transit-type="BUS" aria-pressed="false">버스</button><button type="button" data-transit-type="SUBWAY" aria-pressed="false">지하철</button><button type="button" data-transit-type="BUS_AND_SUBWAY" aria-pressed="false">버스+지하철</button>
+        </div>
+        <div class="transit-sort-row"><p id="transitCount" role="status"></p><label for="transitSort">정렬</label><select id="transitSort"><option value="RECOMMENDED">추천순 · 카카오 제공 순서</option><option value="TIME">최단시간순</option><option value="WALK">최소도보순</option><option value="TRANSFERS" selected>최소환승순</option></select></div>
+        <p class="transit-sort-note">추천순은 카카오 API의 제공 순서입니다. 다른 정렬은 조회된 경로의 시간·도보 거리·환승 횟수를 비교합니다.</p>
+        <div class="transit-legend" aria-label="구간 색상 안내"><span>▣ 버스</span><span>▣ 지하철 · 호선별 색</span><span>┄ 도보</span></div>
+        <div id="transitOptions" class="search-results"></div><h3>선택한 경로의 실시간 버스</h3><p id="busStatus" class="message" role="status"></p><button id="refreshBus" class="secondary full" type="button">실시간 도착 정보 새로고침</button><div id="busArrivals"></div>
+      </section>
       <section id="routeSummary" class="route-summary" hidden aria-labelledby="summaryTitle">
         <div class="section-heading"><h2 id="summaryTitle">선택한 경로</h2><span id="routeSource" class="source-tag">카카오 도보</span></div>
         <p id="routeNames" class="route-names"></p>
@@ -90,8 +99,8 @@
   <script src="./src/geo-utils.js?v=20261010-1"></script>
   <script src="./src/pacemaker.js?v=20261010-1"></script>
   <script src="./src/app.js?v=20261016-1"></script>
-  <script src="./src/mobility-utils.js?v=20261020-1"></script>
-  <script src="./src/mobility.js?v=20261020-1"></script>
+  <script src="./src/mobility-utils.js?v=20261020-2"></script>
+  <script src="./src/mobility.js?v=20261020-2"></script>
   <script src="./src/purpose-nav.js?v=20261016-1"></script>
 </body>
 </html>
