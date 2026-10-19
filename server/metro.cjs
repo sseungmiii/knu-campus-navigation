@@ -18,8 +18,8 @@ function normalizeMetro(raw, {station, line, direction, day}) {
     row.SCHEDULE_METH === (direction === 'UP' ? '상행' : '하행'));
   const trains = rows.flatMap(row => row.SCHEDULE.split(',').flatMap(value => {
     const match = value.trim().match(/^(\d{1,2}):([0-5]\d)(?::([0-5]\d))?(?:\s*\(([^)]{1,40})\))?$/);
-    if (!match || Number(match[1]) > 24) return [];
-    return [{time: `${match[1].padStart(2, '0')}:${match[2]}`, destination: match[4] || null}];
+    if (!match || Number(match[1]) > 26) return [];
+    return [{time: `${match[1].padStart(2, '0')}:${match[2]}${match[3] && match[3] !== '00' ? ':'+match[3] : ''}`, destination: match[4] || null}];
   })).sort((a, b) => a.time.localeCompare(b.time));
   if (!trains.length) throw new RouteError(404, 'NO_TIMETABLE', '선택한 역·호선·방향의 시간표가 없습니다. 역 이름과 운행 방향을 확인해주세요.');
   return {station, line, direction, day, trains, times: [...new Set(trains.map(t => t.time))], source: '대구교통공사 운행 시간표 · 실시간 아님', updatedAt: new Date().toISOString()};
@@ -28,8 +28,21 @@ async function metro(query, env, request = fetch) {
   const shortName = query.get('station')?.trim().replace(/역$/, '');
   // These railway interchange names include 역 in the provider's actual station name.
   const station = ['동대구', '대구'].includes(shortName) ? `${shortName}역` : shortName;
-  const line = query.get('line'), direction = query.get('direction'), day = query.get('day');
-  if (!station || station.length > 30 || !/^[가-힣a-zA-Z0-9 ]+$/.test(station) || !['1','2','3'].includes(line) || !['UP','DOWN'].includes(direction) || !['WEEKDAY','SAT','HOLIDAY'].includes(day)) throw new RouteError(400, 'INVALID_INPUT', '역·호선·방향·운행일을 선택해주세요.');
+  const line = query.get('line') || 'auto', direction = query.get('direction'), day = query.get('day');
+  if (!station || station.length > 30 || !/^[가-힣a-zA-Z0-9 ]+$/.test(station) || !['auto','1','2','3'].includes(line) || !['UP','DOWN'].includes(direction) || !['WEEKDAY','SAT','HOLIDAY'].includes(day)) throw new RouteError(400, 'INVALID_INPUT', '역·호선·방향·운행일을 선택해주세요.');
+  if (line === 'auto') {
+    const results = await Promise.allSettled(['1','2','3'].map(candidate => {
+      const lookup = new URLSearchParams(query); lookup.set('line', candidate);
+      return metro(lookup, env, request);
+    }));
+    const schedules = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+    const failure = results.find(result => result.status === 'rejected' && result.reason.code !== 'NO_TIMETABLE');
+    if (!schedules.length) {
+      if (failure) throw failure.reason;
+      throw new RouteError(404, 'NO_TIMETABLE', '역 이름에 해당하는 시간표가 없습니다. 정확한 역 이름과 운행 방향을 확인해주세요.');
+    }
+    return {...schedules[0], availableLines: schedules.map(schedule => schedule.line), lineLookupIncomplete: Boolean(failure)};
+  }
   const params = new URLSearchParams({STT_NM: station, LINE_NO: line, SCHEDULE_METH: direction, SCHEDULE_TYPE: day});
   const key = params.toString(), previous = cache.get(key);
   if (request === fetch && previous && Date.now() - previous.at < 300000) return previous.data;

@@ -5,6 +5,7 @@ const xml = '<?xml version="1.0"?><rss><apiDataList><apiData><LINE_NO>1</LINE_NO
 const normalized = normalizeMetro(xml, input);
 assert.deepEqual(normalized.times, ['05:30','09:15','24:05']);
 assert.equal(normalized.trains[1].destination,'안심');
+assert.deepEqual(normalizeMetro(xml.replace('9:15:00','9:15:37'),input).times,['05:30','09:15:37','24:05']);
 assert.throws(() => normalizeMetro(xml,{...input,line:'2'}), error => error.code==='NO_TIMETABLE');
 assert.throws(() => normalizeMetro('<html>error</html>',input), error => error.status===502);
 (async () => {
@@ -23,6 +24,15 @@ assert.throws(() => normalizeMetro('<html>error</html>',input), error => error.s
   let count=0;
   await assert.rejects(()=>metro(new URLSearchParams(input),{},async()=>{count++;return {ok:true,text:async()=>`<script>document.cookie='sabSignature=${token}';sabFingerPrint</script>`};}),error=>error.status===502);
   assert.equal(count,2,'Only one confirmation retry is allowed');
+  const autoQuery=new URLSearchParams({...input,line:'auto'});
+  const auto=await metro(autoQuery,{},async()=>({ok:true,text:async()=>xml}));
+  assert.equal(auto.line,'1');assert.deepEqual(auto.availableLines,['1']);
+  const transferXml=xml.replace('</apiDataList>', '<apiData><LINE_NO>2</LINE_NO><STT_NM>동대구</STT_NM><SCHEDULE_METH>상행</SCHEDULE_METH><SCHEDULE>9:17:30(영남대)</SCHEDULE></apiData></apiDataList>');
+  const transfer=await metro(autoQuery,{},async()=>({ok:true,text:async()=>transferXml}));
+  assert.deepEqual(transfer.availableLines,['1','2']);
+  await assert.rejects(()=>metro(new URLSearchParams({...input,station:'없는역',line:'auto'}),{},async()=>({ok:true,text:async()=>xml})),error=>error.status===404);
+  const partial=await metro(autoQuery,{},async url=>({ok:true,text:async()=>new URL(url).searchParams.get('LINE_NO')==='2'?'<html>unavailable</html>':xml}));
+  assert.equal(partial.lineLookupIncomplete,true);assert.equal(partial.line,'1');
   await assert.rejects(()=>metro(new URLSearchParams({...input,station:'<bad>'}),{},()=>{throw Error('must not fetch');}),error=>error.status===400);
   console.log('PASS: metro confirmation retry, strict XML and station/direction matching, terminal names, input validation');
 })().catch(error=>{console.error(error);process.exit(1);});

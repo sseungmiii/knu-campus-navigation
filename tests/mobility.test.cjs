@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const {normalizeTransit,matchStop,findSchedules,bus,nearby,metro,transit}=require('../server/mobility.cjs');
-const {departurePlan,nextTrain,busDeparture}=require('../src/mobility-utils.js');
+const {departurePlan,nextTrain,upcomingTrains,metroServiceDate,busDeparture}=require('../src/mobility-utils.js');
 const {normalizeMeals}=require('../server/meals.cjs');
 const {nextOccurrence}=require('../lib/timetable.cjs');
 const at=Date.parse('2026-10-12T09:00:00+09:00');
@@ -11,6 +11,17 @@ assert.equal(busDeparture([{route:'937',seconds:300}],['937'],[{duration:120},{d
 const menu=normalizeMeals({updated_at:'2026-10-12 08:00:00',days:['월(10/12)'],shops:['empty','full'],data:{full:{'월(10/12)':{중식:{items:['rice']}}}}},new Date(at));
 assert.equal(menu.restaurants[0].name,'full');assert.equal(menu.restaurants[1].meals.length,0);
 assert.deepEqual(nextTrain(['08:00','09:05','09:10','10:00'],at),['09:05','09:10','10:00']);
+const secondsAt=Date.parse('2026-10-12T09:05:01+09:00');
+assert.deepEqual(nextTrain(['09:05','09:05:30','09:10'],secondsAt),['09:05:30','09:10']);
+assert.equal(upcomingTrains([{time:'09:05:30',destination:'안심'}],secondsAt)[0].remainingSeconds,29);
+assert.equal(upcomingTrains([{time:'09:05:30'}],secondsAt+1000)[0].remainingSeconds,28);
+assert.equal(upcomingTrains([{time:'09:05:30'}],secondsAt+30000).length,0);
+const midnightAt=Date.parse('2026-10-13T00:04:59+09:00');
+assert.equal(metroServiceDate(midnightAt),'2026-10-12');
+assert.equal(upcomingTrains([{time:'24:05'}],midnightAt)[0].remainingSeconds,1);
+assert.equal(upcomingTrains([{time:'00:05'}],midnightAt)[0].remainingSeconds,1);
+assert.equal(upcomingTrains([{time:'24:05'}],midnightAt+2000).length,0);
+assert.equal(upcomingTrains([{time:'09:10'}],Date.parse('2026-10-13T09:00:00+09:00'),'2026-10-12').length,0);
 assert.equal(nextOccurrence({weekday:1,start_minute:600,end_minute:660,starts_on:'2026-09-01',ends_on:'2026-12-31'},new Date(at)),'2026-10-12T01:00:00.000Z');
 assert.equal(matchStop('동대구역',[35.879173,128.626983]).id,'7011006700');
 assert.equal(matchStop('동대구역',[35,128]),null);
