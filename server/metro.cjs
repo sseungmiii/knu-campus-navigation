@@ -1,5 +1,7 @@
 const {XMLParser, XMLValidator} = require('fast-xml-parser');
 const {RouteError} = require('./routing.cjs');
+const {metroCalendar}=require('./metro-calendar.cjs');
+const {metroDirectionName}=require('../src/mobility-utils.js');
 const ENDPOINT = 'https://www.dtro.or.kr/open_content_new/ko/OpenApi/stationTime.php';
 const cache = new Map();
 function findSchedules(value, result = []) {
@@ -25,11 +27,29 @@ function normalizeMetro(raw, {station, line, direction, day}) {
   return {station, line, direction, day, trains, times: [...new Set(trains.map(t => t.time))], source: '대구교통공사 운행 시간표 · 실시간 아님', updatedAt: new Date().toISOString()};
 }
 async function metro(query, env, request = fetch) {
+  const calendar=metroCalendar();
+  if(query.get('mode')==='day')return calendar;
   const shortName = query.get('station')?.trim().replace(/역$/, '');
   // These railway interchange names include 역 in the provider's actual station name.
   const station = ['동대구', '대구'].includes(shortName) ? `${shortName}역` : shortName;
-  const line = query.get('line') || 'auto', direction = query.get('direction'), day = query.get('day');
-  if (!station || station.length > 30 || !/^[가-힣a-zA-Z0-9 ]+$/.test(station) || !['auto','1','2','3'].includes(line) || !['UP','DOWN'].includes(direction) || !['WEEKDAY','SAT','HOLIDAY'].includes(day)) throw new RouteError(400, 'INVALID_INPUT', '역·호선·방향·운행일을 선택해주세요.');
+  const line = query.get('line') || 'auto', direction = query.get('direction') || 'BOTH', day = !query.get('day')||query.get('day')==='auto'?calendar.day:query.get('day');
+  if (!station || station.length > 30 || !/^[가-힣a-zA-Z0-9 ]+$/.test(station) || !['auto','1','2','3'].includes(line) || !['UP','DOWN','BOTH'].includes(direction) || !['WEEKDAY','SAT','HOLIDAY'].includes(day)) throw new RouteError(400, 'INVALID_INPUT', '역·호선·방향·운행일을 선택해주세요.');
+  if(direction==='BOTH'){
+    const lines=['1','2','3'];
+    const results=await Promise.all(lines.map(async candidate=>{
+      const directions=await Promise.all(['DOWN','UP'].map(async heading=>{
+        const lookup=new URLSearchParams({station,line:candidate,direction:heading,day});
+        try{return {...await metro(lookup,env,request),heading:metroDirectionName(candidate,heading)};}
+        catch(error){return {line:candidate,direction:heading,heading:metroDirectionName(candidate,heading),times:[],trains:[],unavailable:error.code!=='NO_TIMETABLE'};}
+      }));
+      return {line:candidate,directions};
+    }));
+    const found=results.filter(result=>result.directions.some(item=>item.trains.length));
+    const incomplete=results.some(result=>result.directions.some(item=>item.unavailable));
+    const selected=line==='auto'?found[0]:found.find(item=>item.line===line);
+    if(!selected)throw new RouteError(incomplete?502:404,incomplete?'UPSTREAM_UNAVAILABLE':'NO_TIMETABLE',incomplete?'지하철 시간표 서버에 연결하지 못했습니다. 잠시 후 다시 조회해주세요.':'역 이름에 해당하는 시간표가 없습니다. 정확한 역 이름과 호선을 확인해주세요.');
+    return {station,line:selected.line,...calendar,day,directions:selected.directions,availableLines:found.map(item=>item.line),lineLookupIncomplete:incomplete,updatedAt:new Date().toISOString()};
+  }
   if (line === 'auto') {
     const results = await Promise.allSettled(['1','2','3'].map(candidate => {
       const lookup = new URLSearchParams(query); lookup.set('line', candidate);

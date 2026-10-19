@@ -88,7 +88,40 @@ async function searchNearby() {
     });
   }catch(error){if(generation===facilityGeneration)$('nearbyMessage').textContent=error.message||'시설을 조회하지 못했습니다.';}
 }
-let metroSchedule=null,metroController=null,metroGeneration=0;
+let metroSchedule=null,metroController=null,metroGeneration=0,metroNearbyGeneration=0;
+const metroDays={WEEKDAY:'평일',SAT:'토요일',HOLIDAY:'일요일·공휴일'};
+function resetMetroStation() {
+  clearMetroResults();const option=textNode('option','역 이름으로 자동 선택');option.value='auto';
+  $('metroLine').replaceChildren(option);$('metroLine').value='auto';$('metroLineChoice').hidden=true;
+}
+async function findMetroNearby() {
+  const generation=++metroNearbyGeneration;
+  $('findMetroNearby').disabled=true;$('metroNearbyStatus').textContent='현재 위치에서 가까운 역을 찾는 중…';$('metroNearbyResults').replaceChildren();
+  try{
+    const position=await getPosition();if(generation!==metroNearbyGeneration)return;
+    const response=await fetch(`${apiBase}/api/nearby`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:'SW8',points:[[position.coords.latitude,position.coords.longitude]]}),signal:AbortSignal.timeout(15000)});
+    const data=await response.json();if(generation!==metroNearbyGeneration)return;if(!response.ok)throw new Error(data.error);
+    $('metroNearbyStatus').textContent=data.places.length?'가까운 역을 누르면 양방향 열차를 조회합니다. 거리는 직선 기준입니다.':'5km 이내 대구 1~3호선 역을 찾지 못했습니다. 역 이름을 직접 입력해주세요.';
+    for(const place of data.places){
+      const station=place.name.replace(/\s+.*$/,'').replace(/\([^)]*\)/g,'');
+      const button=textNode('button','','place-option');button.type='button';
+      button.append(textNode('strong',place.name),textNode('span',formatDistance(place.offset)));
+      button.onclick=()=>{
+        resetMetroStation();$('metroStation').value=station;
+        const line=place.name.match(/대구([123])호선/);
+        if(line){const option=textNode('option',`${line[1]}호선`);option.value=line[1];$('metroLine').append(option);$('metroLine').value=line[1];}
+        $('metroForm').requestSubmit();
+      };$('metroNearbyResults').append(button);
+    }
+  }catch(error){if(generation===metroNearbyGeneration)$('metroNearbyStatus').textContent=error.name==='TimeoutError'?'주변 역 응답이 늦습니다. 다시 시도해주세요.':error.message||'주변 역을 찾지 못했습니다.';}
+  finally{if(generation===metroNearbyGeneration)$('findMetroNearby').disabled=false;}
+}
+function showMetroDay(data) {
+  $('metroToday').textContent=`${data.serviceDate} · ${metroDays[data.day]}${data.holidayName?' · '+data.holidayName:''}${$('metroDay').value==='auto'?' 자동 적용':' 직접 선택'}`;
+}
+async function loadMetroDay() {
+  try{const response=await fetch(`${apiBase}/api/metro?mode=day`,{signal:AbortSignal.timeout(10000)});if(response.ok&&$('metroDay').value==='auto'&&!metroSchedule)showMetroDay(await response.json());}catch{/* The timetable response also carries the service-day selection. */}
+}
 function clearMetroResults() {
   metroGeneration++;metroController?.abort();metroSchedule=null;
   $('metroResults').replaceChildren();$('metroStatus').textContent='';$('metroSearch').disabled=false;
@@ -97,22 +130,27 @@ function renderMetroCountdown() {
   if(!metroSchedule)return;
   const {data,serviceDate}=metroSchedule,now=Date.now(),box=$('metroCountdown');
   if(!box)return;
-  box.replaceChildren(textNode('h3','다음 열차까지 남은 시간'));
+  box.replaceChildren();
   if(metroServiceDate(now)!==serviceDate){box.append(textNode('p','운행일이 바뀌었습니다. 운행일을 확인하고 다시 조회해주세요.'));return;}
-  const upcoming=upcomingTrains(data.trains||data.times.map(time=>({time})),now,serviceDate);
-  if(!upcoming.length)box.append(textNode('p','선택한 운행일 기준으로 남은 열차가 없습니다.'));
-  for(const train of upcoming){
-    const row=textNode('div','','train-row'),info=textNode('div','','train-info');
-    info.append(textNode('strong',`${Math.floor(train.remainingSeconds/60)}분 ${String(train.remainingSeconds%60).padStart(2,'0')}초`),textNode('span',`${train.time} 출발 · ${train.destination?train.destination+'행':'정규 운행'}`));row.append(info);box.append(row);
+  for(const schedule of data.directions||[data]){
+    const panel=textNode('section','','metro-direction');panel.append(textNode('h3',`${schedule.heading||metroDirectionName(data.line,schedule.direction)} 방면`));
+    const upcoming=upcomingTrains(schedule.trains||schedule.times.map(time=>({time})),now,serviceDate);
+    if(schedule.unavailable)panel.append(textNode('p','이 방면의 시간표를 불러오지 못했습니다. 다시 조회해주세요.'));
+    else if(!upcoming.length)panel.append(textNode('p',schedule.trains?.length?'오늘 남은 열차가 없습니다.':'이 역에서 출발하는 열차가 없습니다.'));
+    for(const [index,train] of upcoming.entries()){
+      const row=textNode('div','',index===0?'train-row train-first':'train-row'),info=textNode('div','','train-info');
+      info.append(textNode('strong',`${Math.floor(train.remainingSeconds/60)}분 ${String(train.remainingSeconds%60).padStart(2,'0')}초`),textNode('span',`${train.time} 출발 · ${train.destination||schedule.heading||metroDirectionName(data.line,schedule.direction)}행`));row.append(info);panel.append(row);
+    }
+    box.append(panel);
   }
-  box.append(textNode('p','시간표 기준으로 매초 갱신됩니다. 실제 도착과 다를 수 있으며, 공휴일은 직접 선택해주세요.','subtext'));
+  box.append(textNode('p','시간표 기준으로 매초 갱신됩니다. 실제 열차 도착과 다를 수 있습니다.','subtext'));
 }
 async function searchMetro(event) {
   event.preventDefault();clearMetroResults();const generation=metroGeneration,serviceDate=metroServiceDate();
   metroController=new AbortController();
   $('metroStatus').textContent='역과 공식 시간표 조회 중…';$('metroStatus').classList.remove('error');$('metroSearch').disabled=true;
   try {
-    const query=new URLSearchParams({station:$('metroStation').value.trim(),line:$('metroLine').value,direction:$('metroDirection').value,day:$('metroDay').value});
+    const query=new URLSearchParams({station:$('metroStation').value.trim(),line:$('metroLine').value,direction:'BOTH',day:$('metroDay').value});
     const response=await fetch(`${apiBase}/api/metro?${query}`,{signal:AbortSignal.any([metroController.signal,AbortSignal.timeout(15000)])});
     const data=await response.json();if(generation!==metroGeneration)return;if(!response.ok)throw new Error(data.error);
     if(data.availableLines){
@@ -121,13 +159,15 @@ async function searchMetro(event) {
       if(data.lineLookupIncomplete){const retry=textNode('option','호선 다시 자동 확인');retry.value='auto';select.append(retry);}
       select.value=data.line;$('metroLineChoice').hidden=data.availableLines.length<2&&!data.lineLookupIncomplete;
     }
-    const days={WEEKDAY:'평일',SAT:'토요일',HOLIDAY:'일요일·공휴일'};
-    $('metroStatus').textContent=`${data.station.replace(/역$/,'')}역 · ${data.line}호선 · ${days[data.day]} · ${data.direction==='UP'?'상행':'하행'} · ${kstTime(data.updatedAt)} 조회`;
+    showMetroDay({...data,serviceDate:data.serviceDate||serviceDate});
+    $('metroStatus').textContent=`${data.station.replace(/역$/,'')}역 · ${data.line}호선 · ${metroDays[data.day]} · ${kstTime(data.updatedAt)} 조회`;
     if(data.lineLookupIncomplete)$('metroStatus').textContent+=' · 일부 호선 조회 실패: 호선을 다시 자동 확인할 수 있습니다.';
     const box=textNode('div','','metro-next');box.id='metroCountdown';$('metroResults').append(box);
-    metroSchedule={data,serviceDate};renderMetroCountdown();
-    const details=document.createElement('details');details.className='all-trains';details.append(textNode('summary','전체 시간표 · '+data.times.length+'회'));
-    const grid=textNode('div','','train-grid');for(const train of data.trains||data.times.map(time=>({time}))){grid.append(textNode('span',train.time+(train.destination?' '+train.destination+'행':'')));}details.append(grid);$('metroResults').append(details);
+    metroSchedule={data,serviceDate:data.serviceDate||serviceDate};renderMetroCountdown();
+    for(const schedule of data.directions||[data]){
+      const details=document.createElement('details');details.className='all-trains';details.append(textNode('summary',`${schedule.heading||metroDirectionName(data.line,schedule.direction)} 방면 전체 시간표 · ${schedule.times.length}회`));
+      const grid=textNode('div','','train-grid');for(const train of schedule.trains||schedule.times.map(time=>({time}))){grid.append(textNode('span',train.time+(train.destination?' '+train.destination+'행':'')));}details.append(grid);$('metroResults').append(details);
+    }
   } catch(error) {if(generation!==metroGeneration)return;$('metroStatus').classList.add('error');$('metroStatus').textContent=error.name==='TimeoutError'?'시간표 응답이 늦어지고 있습니다. 다시 조회해주세요.':error.message||'시간표를 조회하지 못했습니다.';}
   finally {if(generation===metroGeneration)$('metroSearch').disabled=false;}
 }
@@ -139,16 +179,17 @@ window.addEventListener('DOMContentLoaded',()=>{
       for(const restaurant of data.restaurants){const card=textNode('div','','facility-card');card.append(textNode('strong',restaurant.name));
         if(!restaurant.meals.length)card.appendChild(textNode('p','식단정보가 없습니다.'));
         for(const meal of restaurant.meals)card.appendChild(textNode('p',`${meal.type}${meal.time?' · '+meal.time:''}: ${meal.items.join(', ')}`));
-        const button=textNode('button','식당 위치 검색','secondary');button.type='button';button.onclick=()=>{showPurpose('route',true);$('endQuery').value=`경북대학교 ${restaurant.name.replace(/\(.*\)/,'')}`;search('end');};card.appendChild(button);$('mealsResults').appendChild(card);
+        const locationQuery=mealLocationQuery(restaurant.name);card.append(textNode('p',locationQuery,'meal-building'));
+        const button=textNode('button','식당 위치 검색','secondary');button.type='button';button.onclick=()=>{showPurpose('route',true);$('endQuery').value=locationQuery;search('end');};card.appendChild(button);$('mealsResults').appendChild(card);
       }
     }catch(error){$('mealsStatus').textContent=error.message||'학식 정보를 불러오지 못했습니다.';}finally{$('loadMeals').disabled=false;}
   };
   $('transportMode').onchange=()=>{clearRoute();$('findRoute').textContent='경로 찾기';$('routeMode').disabled=$('transportMode').value==='transit';$('walkOptions').hidden=$('transportMode').value==='transit';message('새 이동 수단으로 경로를 검색하세요.');};
   ['classStart','safetyMinutes','indoorMinutes'].forEach(id=>$(id).onchange=updateDeadline);
   $('refreshBus').onclick=refreshBus;$('searchNearby').onclick=searchNearby;$('metroForm').onsubmit=searchMetro;
-  $('metroStation').oninput=()=>{clearMetroResults();const option=textNode('option','역 이름으로 자동 선택');option.value='auto';$('metroLine').replaceChildren(option);$('metroLineChoice').hidden=true;};
-  ['metroLine','metroDirection','metroDay'].forEach(id=>$(id).onchange=()=>{$('metroForm').requestSubmit();});
-  const weekday=new Date(`${metroServiceDate()}T12:00:00+09:00`).getUTCDay();$('metroDay').value=weekday===0?'HOLIDAY':weekday===6?'SAT':'WEEKDAY';
+  $('metroStation').oninput=resetMetroStation;
+  ['metroLine','metroDay'].forEach(id=>$(id).onchange=()=>{if($('metroStation').value.trim())$('metroForm').requestSubmit();else if($('metroDay').value==='auto')loadMetroDay();});
+  $('findMetroNearby').onclick=findMetroNearby;$('metroDay').value='auto';loadMetroDay();
   const timer=setInterval(updateDeadline,30000),metroTimer=setInterval(renderMetroCountdown,1000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderMetroCountdown();});
   window.addEventListener('pagehide',event=>{if(event.persisted)return;clearInterval(timer);clearInterval(metroTimer);metroController?.abort();mobilityController?.abort();facilityController?.abort();});

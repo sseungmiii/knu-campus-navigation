@@ -33,6 +33,15 @@ assert.throws(() => normalizeMetro('<html>error</html>',input), error => error.s
   await assert.rejects(()=>metro(new URLSearchParams({...input,station:'없는역',line:'auto'}),{},async()=>({ok:true,text:async()=>xml})),error=>error.status===404);
   const partial=await metro(autoQuery,{},async url=>({ok:true,text:async()=>new URL(url).searchParams.get('LINE_NO')==='2'?'<html>unavailable</html>':xml}));
   assert.equal(partial.lineLookupIncomplete,true);assert.equal(partial.line,'1');
+  const both=await metro(new URLSearchParams({station:'동대구',line:'auto',direction:'BOTH',day:'auto'}),{},async()=>({ok:true,text:async()=>transferXml}));
+  assert.deepEqual(both.availableLines,['1','2']);assert.equal(both.directions.length,2);
+  assert.equal(both.directions[0].heading,'하양');assert.equal(both.directions[1].heading,'설화명곡');
+  assert.equal(both.directions[0].trains.length,0);assert.equal(both.directions[1].trains.length,3);
+  const line2=await metro(new URLSearchParams({station:'동대구',line:'2',direction:'BOTH',day:'WEEKDAY'}),{},async()=>({ok:true,text:async()=>transferXml}));
+  assert.deepEqual(line2.directions.map(item=>item.heading),['영남대','문양']);
+  assert.deepEqual(line2.availableLines,['1','2'],'Transfer choices remain available after switching lines');
+  const today=await metro(new URLSearchParams({mode:'day'}),{},()=>{throw Error('Day selection must not call upstream');});
+  assert.match(today.serviceDate,/^\d{4}-\d{2}-\d{2}$/);assert.ok(['WEEKDAY','SAT','HOLIDAY'].includes(today.day));
   await assert.rejects(()=>metro(new URLSearchParams({...input,station:'<bad>'}),{},()=>{throw Error('must not fetch');}),error=>error.status===400);
   console.log('PASS: metro confirmation retry, strict XML and station/direction matching, terminal names, input validation');
 })().catch(error=>{console.error(error);process.exit(1);});

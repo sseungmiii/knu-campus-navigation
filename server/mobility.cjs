@@ -78,19 +78,20 @@ async function bus(query,env,request=fetch) {
   if(cache.size>1000) cache.clear(); cache.set(key,{time:Date.now(),data:result}); return result;
 }
 async function nearby(input,env,request=fetch) {
-  if(!Array.isArray(input?.points)||input.points.length<1||input.points.length>40||!input.points.every(validPoint)||!['FD6','CE7','CS2'].includes(input.category)) throw new RouteError(400,'INVALID_INPUT','시설 검색 조건을 확인해주세요.');
+  if(!Array.isArray(input?.points)||input.points.length<1||input.points.length>40||!input.points.every(validPoint)||!['FD6','CE7','CS2','SW8'].includes(input.category)||(input.category==='SW8'&&input.points.length!==1)) throw new RouteError(400,'INVALID_INPUT','시설 검색 조건을 확인해주세요.');
   if(!env.KAKAO_REST_API_KEY) throw new RouteError(503,'NOT_CONFIGURED','시설 검색 연결을 준비 중입니다.');
-  const points=input.points, metrics=points.length>1 ? makeRouteMetrics(points) : null;
+  const stations=input.category==='SW8',points=input.points, metrics=points.length>1 ? makeRouteMetrics(points) : null;
   const centers=[points[0],points[Math.floor(points.length/2)],points.at(-1)].filter((p,i,a)=>a.findIndex(q=>q[0]===p[0]&&q[1]===p[1])===i);
-  const responses=await Promise.all(centers.map(async p=>read(`https://dapi.kakao.com/v2/local/search/category.json?${new URLSearchParams({category_group_code:input.category,x:p[1],y:p[0],radius:700,sort:'distance',size:15})}`,{headers:{Authorization:`KakaoAK ${env.KAKAO_REST_API_KEY}`}},request)));
+  const responses=await Promise.all(centers.map(async p=>read(`https://dapi.kakao.com/v2/local/search/category.json?${new URLSearchParams({category_group_code:input.category,x:p[1],y:p[0],radius:stations?5000:700,sort:'distance',size:15})}`,{headers:{Authorization:`KakaoAK ${env.KAKAO_REST_API_KEY}`}},request)));
   const unique=new Map();
   for(const data of responses) for(const p of list(data.documents)) {
     const coords=[Number(p.y),Number(p.x)]; if(!validPoint(coords))continue;
     const offset=metrics?projectOnRoute(metrics,coords).offset:metersBetween(coords,points[0]);
-    if(offset>350)continue;
+    if(offset>(stations?5000:350))continue;
+    if(stations&&!/대구[123]호선/.test(`${p.place_name} ${p.category_name}`))continue;
     unique.set(p.id,{id:p.id,name:p.place_name,coords,address:p.road_address_name||p.address_name,phone:p.phone,url:/^https?:\/\/place\.map\.kakao\.com\//.test(p.place_url||'')?p.place_url:null,offset:Math.round(offset),estimatedExtraMinutes:Math.ceil(offset*2/80)});
   }
-  return {places:[...unique.values()].sort((a,b)=>a.offset-b.offset).slice(0,15),source:'카카오 장소 검색',note:'경로 주변 일부 지점을 검색합니다. 추가 시간은 직선거리 기준 왕복 도보 추정이며 영업 여부는 확인이 필요합니다.'};
+  return {places:[...unique.values()].sort((a,b)=>a.offset-b.offset).slice(0,15),source:'카카오 장소 검색',note:stations?'현재 위치에서 직선거리 5km 이내 대구 1~3호선 역입니다.':'경로 주변 일부 지점을 검색합니다. 추가 시간은 직선거리 기준 왕복 도보 추정이며 영업 여부는 확인이 필요합니다.'};
 }
 const {metro,findSchedules}=require('./metro.cjs');
 module.exports={transit,bus,nearby,metro,normalizeTransit,matchStop,findSchedules};

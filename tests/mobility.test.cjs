@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const {normalizeTransit,matchStop,findSchedules,bus,nearby,metro,transit}=require('../server/mobility.cjs');
-const {departurePlan,nextTrain,upcomingTrains,metroServiceDate,busDeparture}=require('../src/mobility-utils.js');
+const {departurePlan,nextTrain,upcomingTrains,metroServiceDate,mealLocationQuery,busDeparture}=require('../src/mobility-utils.js');
 const {normalizeMeals}=require('../server/meals.cjs');
 const {nextOccurrence}=require('../lib/timetable.cjs');
 const at=Date.parse('2026-10-12T09:00:00+09:00');
@@ -22,6 +22,7 @@ assert.equal(upcomingTrains([{time:'24:05'}],midnightAt)[0].remainingSeconds,1);
 assert.equal(upcomingTrains([{time:'00:05'}],midnightAt)[0].remainingSeconds,1);
 assert.equal(upcomingTrains([{time:'24:05'}],midnightAt+2000).length,0);
 assert.equal(upcomingTrains([{time:'09:10'}],Date.parse('2026-10-13T09:00:00+09:00'),'2026-10-12').length,0);
+for(const [name,building] of [['정보센터식당','종합정보센터'],['복지관 교직원식당','복지관'],['카페테리아 첨성','복지관'],['GP감꽃식당','글로벌플라자'],['gp감꽃식당','글로벌플라자'],['공학관교직원식당(외부업체)','공대12호관'],['공학관학생식당(외부업체)','공대12호관']])assert.equal(mealLocationQuery(name),`경북대학교 ${building}`);
 assert.equal(nextOccurrence({weekday:1,start_minute:600,end_minute:660,starts_on:'2026-09-01',ends_on:'2026-12-31'},new Date(at)),'2026-10-12T01:00:00.000Z');
 assert.equal(matchStop('동대구역',[35.879173,128.626983]).id,'7011006700');
 assert.equal(matchStop('동대구역',[35,128]),null);
@@ -40,6 +41,12 @@ assert.equal(routes.routes[0].steps[0].boardingStop.id,'7011006700');
   assert.deepEqual(connected.routes[0].steps.map(s=>s.type),['WALKING','BUS','WALKING']);assert.equal(connected.routes[0].duration,700);assert.equal(connected.routes[0].connectionsComplete,true);
   const facilities=await nearby({points:[[35.89,128.61],[35.891,128.61]],category:'CE7'},{KAKAO_REST_API_KEY:'fake'},async()=>response({documents:[{id:'1',place_name:'cafe',x:'128.6101',y:'35.8905',place_url:'https://place.map.kakao.com/1'},{id:'2',x:'129',y:'36'}]}));
   assert.equal(facilities.places.length,1);assert.ok(facilities.places[0].offset<20);
+  const stations=await nearby({points:[[35.89,128.61]],category:'SW8'},{KAKAO_REST_API_KEY:'fake'},async url=>{
+    const query=new URL(url).searchParams;assert.equal(query.get('radius'),'5000');assert.equal(query.get('category_group_code'),'SW8');
+    return response({documents:[{id:'1',place_name:'대구역 대구1호선',x:'128.61',y:'35.88'},{id:'2',place_name:'칠성시장역 대구1호선',x:'128.62',y:'35.89'},{id:'3',place_name:'대구역 대경선',x:'128.61',y:'35.88'},{id:'4',place_name:'너무먼역 대구2호선',x:'129',y:'36'}]});
+  });
+  assert.equal(stations.places.length,2);assert.ok(stations.places[0].offset<=stations.places[1].offset);
+  await assert.rejects(()=>nearby({points:[[35.89,128.61],[35.88,128.62]],category:'SW8'},{KAKAO_REST_API_KEY:'fake'}),error=>error.status===400);
   await assert.rejects(()=>metro(new URLSearchParams({station:'동대구',line:'1',direction:'UP',day:'WEEKDAY'}),{},async()=>({ok:true,text:async()=>'<script>sabSignature</script>'})),error=>error.status===502);
   console.log('PASS: transit geometry, correct boarding stop, key decoding, bus arrival units, route facilities, KST departure and schedule boundary');
 })().catch(e=>{console.error(e);process.exit(1);});
