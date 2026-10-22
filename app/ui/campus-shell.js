@@ -2,6 +2,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {createClient} from '../../lib/supabase/client';
 import timetable from '../../lib/timetable.cjs';
+import auth from '../../lib/auth.cjs';
 const days = ['월', '화', '수', '목', '금', '토', '일'];
 const time = minute => `${String(Math.floor(minute / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
 const minutes = value => Number(value.split(':')[0]) * 60 + Number(value.split(':')[1]);
@@ -18,10 +19,13 @@ export default function CampusShell({supabaseConfig}) {
   const [weekday, setWeekday] = useState(1), [form, setForm] = useState(emptyForm), [editing, setEditing] = useState(null);
   const [placeQuery, setPlaceQuery] = useState(''), [place, setPlace] = useState(null), [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false), [deleteId, setDeleteId] = useState(null), [refreshIndex, setRefreshIndex] = useState(0);
+  const [authMode,setAuthMode]=useState('login'),[confirmationEmail,setConfirmationEmail]=useState('');
   userRef.current = user;
   const next = now ? timetable.upcomingClass(classes, now) : null;
   useEffect(() => {
     setNow(new Date()); setWeekday(timetable.koreaClock().weekday);
+    const params=new URLSearchParams(location.search),result=params.get('auth');
+    if(result){setOpen(true);setStatus(result==='confirmed'?'이메일 인증을 완료했습니다. 시간표를 이용하려면 로그인해주세요.':'인증 링크가 만료되었거나 확인하지 못했습니다. 가입한 브라우저에서 링크를 열거나 인증 메일을 다시 받아주세요.');params.delete('auth');history.replaceState(null,'',location.pathname+(params.size?'?'+params:'')+location.hash);}
     const timer = setInterval(() => setNow(new Date()), 30000);
     const receive = event => { if (event.origin === location.origin && event.source === frame.current?.contentWindow && event.data?.type === 'knu:map-ready') setReady(true); };
     window.addEventListener('message', receive);
@@ -33,7 +37,7 @@ export default function CampusShell({supabaseConfig}) {
   useEffect(() => {
     if (!supabase) return;
     let alive = true;
-    supabase.auth.getUser().then(({data}) => { if (alive) {setUser(data.user || null); setAuthLoading(false);} });
+    supabase.auth.getUser().then(({data}) => { if (alive) {setUser(data.user || null); setAuthLoading(false);} }).catch(()=>{if(alive){setAuthLoading(false);setStatus('로그인 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');}});
     const {data: listener} = supabase.auth.onAuthStateChange((_event, session) => {
       if (alive) {
         if (session?.user?.id !== userRef.current?.id) {setClasses([]); setAllowed(false);}
@@ -59,9 +63,27 @@ export default function CampusShell({supabaseConfig}) {
     const data = new FormData(event.currentTarget); setBusy(true); setStatus('로그인 중…');
     try {
       const {error} = await supabase.auth.signInWithPassword({email: String(data.get('email')).trim(), password: String(data.get('password'))});
-      if (error) setStatus('로그인하지 못했습니다. 이메일과 비밀번호를 확인해주세요.');
+      if (error) {if(error.code==='email_not_confirmed')setConfirmationEmail(String(data.get('email')).trim());setStatus(error.code==='email_not_confirmed'?auth.authErrorMessage(error):'로그인하지 못했습니다. 이메일과 비밀번호를 확인해주세요.');}
       else setStatus('시간표 접근 권한을 확인 중…');
     } catch {setStatus('로그인 서버에 연결하지 못했습니다.');} finally {setBusy(false);}
+  }
+  async function signup(event) {
+    event.preventDefault();if(!supabase||busy)return;
+    const formElement=event.currentTarget,values=new FormData(formElement);let credentials;
+    try{credentials=auth.validateSignup({email:values.get('email'),password:values.get('password'),confirmation:values.get('confirmation')});}catch(error){setStatus(error.message);return;}
+    setBusy(true);setStatus('가입 요청 중…');
+    try{
+      const {data,error}=await supabase.auth.signUp({...credentials,options:{emailRedirectTo:`${location.origin}/auth/callback`}});
+      if(error){setStatus(auth.authErrorMessage(error));return;}
+      formElement.reset();setConfirmationEmail(credentials.email);
+      if(data.session){setStatus('가입되었습니다. 시간표 이용 권한을 확인합니다.');}
+      else{setAuthMode('login');setStatus('가입 요청을 접수했습니다. 이메일의 인증 링크를 누른 후 로그인해주세요. 이미 가입한 이메일이라면 로그인을 이용해주세요.');}
+    }catch{setStatus('회원가입 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');}finally{setBusy(false);}
+  }
+  async function resendConfirmation() {
+    if(!supabase||busy||!confirmationEmail)return;setBusy(true);
+    try{const {error}=await supabase.auth.resend({type:'signup',email:confirmationEmail,options:{emailRedirectTo:`${location.origin}/auth/callback`}});setStatus(error?auth.authErrorMessage(error):'인증 메일을 요청했습니다. 받은편지함과 스팸함을 확인해주세요.');}
+    catch{setStatus('인증 메일을 요청하지 못했습니다. 잠시 후 다시 시도해주세요.');}finally{setBusy(false);}
   }
   async function logout() {
     setBusy(true); const {error} = await supabase.auth.signOut({scope:'local'});
@@ -114,14 +136,16 @@ export default function CampusShell({supabaseConfig}) {
     <header className="account-bar">
       <div className="next-class"><strong>{next ? `다음 수업 · ${next.title}` : '내 시간표로 길찾기'}</strong><span>{next ? `${time(next.start_minute)} · ${next.place_name}` : '수업을 등록하면 오늘의 이동을 바로 준비할 수 있어요.'}</span></div>
       {next && <button disabled={!ready} onClick={() => navigate(next)}>수업으로 길찾기</button>}
-      <button className="accent" onClick={() => setOpen(true)}>{user ? '내 시간표' : '로그인 · 시간표'}</button>
+      <button className="accent" onClick={() => setOpen(true)}>{user ? '내 시간표' : '로그인 · 회원가입'}</button>
     </header>
     <iframe ref={frame} className="campus-map" src="/map/index.html" title="카카오 캠퍼스 도보 길찾기" onLoad={() => {setReady(false); frame.current?.contentWindow?.postMessage({type:'knu:ping'}, location.origin);}} />
     <dialog ref={dialog} className="timetable-dialog" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}>
       <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => setOpen(false)}>닫기</button></header>
       {!supabase ? <p>시간표 서버 연결을 준비 중입니다. 지도 길찾기는 이용할 수 있습니다.</p> : authLoading ? <p>로그인 확인 중…</p> : !user ? <>
-        <p className="muted">허용된 두 계정만 시간표를 이용할 수 있습니다. 회원가입은 제공하지 않습니다.</p>
-        <form onSubmit={login} className="schedule-form"><label>이메일<input name="email" type="email" autoComplete="username" required /></label><label>비밀번호<input name="password" type="password" autoComplete="current-password" required /></label><button className="accent" disabled={busy}>로그인</button></form>
+        <div className="auth-tabs" role="group" aria-label="계정 이용"><button type="button" disabled={busy} aria-pressed={authMode==='login'} onClick={()=>{setAuthMode('login');setStatus('');}}>로그인</button><button type="button" disabled={busy} aria-pressed={authMode==='signup'} onClick={()=>{setAuthMode('signup');setStatus('');}}>회원가입</button></div>
+        <p className="muted">{authMode==='signup'?'이메일과 비밀번호로 가입하세요. 이메일 인증 후 나만의 시간표를 관리할 수 있습니다.':'로그인하면 저장한 수업과 장소를 불러옵니다.'}</p>
+        <form key={authMode} onSubmit={authMode==='signup'?signup:login} className="schedule-form"><fieldset disabled={busy}><label>이메일<input name="email" type="email" autoComplete="email" maxLength={254} defaultValue={confirmationEmail} required /></label><label>비밀번호<input name="password" type="password" autoComplete={authMode==='signup'?'new-password':'current-password'} minLength={authMode==='signup'?8:undefined} aria-describedby={authMode==='signup'?'signup-password-help':undefined} required /></label>{authMode==='signup'&&<><p id="signup-password-help" className="auth-help">비밀번호는 8자 이상으로 입력해주세요.</p><label>비밀번호 확인<input name="confirmation" type="password" autoComplete="new-password" minLength={8} required /></label></>}<button className="accent" disabled={busy}>{busy?'처리 중…':authMode==='signup'?'가입하고 인증 메일 받기':'로그인'}</button></fieldset></form>
+        {confirmationEmail&&<button className="auth-resend" type="button" disabled={busy} onClick={resendConfirmation}>인증 메일 다시 받기</button>}
       </> : <>
         <div className="account-row"><span>{user.email}</span><button disabled={busy} onClick={logout}>로그아웃</button></div>
         {!allowed && <button disabled={busy} onClick={() => setRefreshIndex(value => value + 1)}>접근 권한 다시 확인</button>}

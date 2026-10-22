@@ -10,9 +10,10 @@ async function authorized() {
   // Verify identity with Auth, never trust a cookie's unverified user object.
   const {data, error} = await supabase.auth.getUser();
   if (error || !data.user) return {response: json({error: '로그인이 필요합니다.'}, 401)};
+  if (!data.user.email_confirmed_at) return {response: json({error: '이메일 인증을 완료한 후 시간표를 이용해주세요.'}, 403)};
   const allowed = await supabase.rpc('is_schedule_user');
   if (allowed.error) return {response: json({error: '시간표 DB 설정을 준비 중입니다.'}, 503)};
-  if (allowed.data !== true) return {response: json({error: '이 계정은 시간표 이용 권한이 없습니다.'}, 403)};
+  if (allowed.data !== true) return {response: json({error: '시간표 이용 권한을 확인하지 못했습니다. 이메일 인증 및 회원 이용 설정을 확인해주세요.'}, 403)};
   return {supabase, user: data.user};
 }
 export async function GET() {

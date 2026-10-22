@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const {validateSignup,authErrorMessage}=require('../lib/auth.cjs');
+const input={email:' student@example.com ',password:'Test-only-pass123',confirmation:'Test-only-pass123'};
+assert.equal(validateSignup(input).email,'student@example.com');
+assert.throws(()=>validateSignup({...input,confirmation:'different'}),/일치/);
+assert.throws(()=>validateSignup({...input,password:'short',confirmation:'short'}),/8자/);
+assert.throws(()=>validateSignup({...input,email:'invalid'}),/이메일/);
+assert.throws(()=>validateSignup({...input,password:'가'.repeat(25),confirmation:'가'.repeat(25)}),/72바이트/);
+assert.match(authErrorMessage({code:'email_not_confirmed'}),/인증/);
+assert.match(authErrorMessage({code:'over_email_send_rate_limit'}),/요청이 많습니다/);
+assert.match(authErrorMessage({code:'signup_disabled'}),/설정을 준비/);
+assert.doesNotMatch(authErrorMessage({message:'private upstream error'}),/private upstream/);
+console.log('PASS: signup email/password validation, confirmation mismatch, UTF-8 size and safe auth errors');
