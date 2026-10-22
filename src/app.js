@@ -150,6 +150,9 @@ async function init() {
     map.setType(sky); $('mapTypeRoad').classList.toggle('active', !sky); $('mapTypeSky').classList.toggle('active', sky); $('mapTypeRoad').setAttribute('aria-pressed', String(!sky)); $('mapTypeSky').setAttribute('aria-pressed', String(sky));
   };
   map = await createCampusMap(); pacemaker = new RoutePacemaker(map, updatePace);
+  const reportPanel=()=>window.parent.postMessage({type:'knu:map-panel',open:document.body.classList.contains('panel-open')||!$('campusPlaceCard').hidden||!$('campusSearchResults').hidden},location.origin);
+  const panelObserver=new MutationObserver(reportPanel);panelObserver.observe(document.body,{attributes:true,attributeFilter:['class']});
+  for(const id of ['campusPlaceCard','campusSearchResults'])panelObserver.observe($(id),{attributes:true,attributeFilter:['hidden']});reportPanel();
   if (typeof initCampusExplorer === 'function') initCampusExplorer();
   window.addEventListener('pagehide', () => pacemaker.stop());
   updateReady();

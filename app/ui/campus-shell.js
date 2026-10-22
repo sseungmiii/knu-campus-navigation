@@ -6,6 +6,7 @@ import auth from '../../lib/auth.cjs';
 import classEditor from '../../lib/class-editor.cjs';
 import classTrip from '../../lib/class-trip.cjs';
 import WeekCalendar from './week-calendar';
+import CampusWeather,{ClassWeather} from './campus-weather';
 const days = ['월', '화', '수', '목', '금', '토', '일'];
 const time = minute => `${String(Math.floor(minute / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
 const minutes = value => Number(value.split(':')[0]) * 60 + Number(value.split(':')[1]);
@@ -31,6 +32,8 @@ export default function CampusShell({supabaseConfig}) {
   const [searching, setSearching] = useState(false), [deleteId, setDeleteId] = useState(null), [refreshIndex, setRefreshIndex] = useState(0);
   const [authMode,setAuthMode]=useState('login');
   const [second,setSecond]=useState(null);
+  const [weather,setWeather]=useState(null);
+  const [mapPanelOpen,setMapPanelOpen]=useState(false);
   const [calendarTerm,setCalendarTerm]=useState(''),[trip,setTrip]=useState(null);
   const tripRef=useRef(null);tripRef.current=trip;
   const terms=[...new Set(classes.map(row=>row.term))];
@@ -45,6 +48,7 @@ export default function CampusShell({supabaseConfig}) {
     const receive = event => {
       if(event.origin!==location.origin||event.source!==frame.current?.contentWindow)return;
       if(event.data?.type==='knu:map-ready'){setReady(true);return;}
+      if(event.data?.type==='knu:map-panel'&&typeof event.data.open==='boolean'){setMapPanelOpen(event.data.open);return;}
       const active=tripRef.current;if(!active||event.data?.classId!==active.row.id)return;
       if(event.data.type==='knu:route-pending')setTrip(previous=>previous&&({...previous,route:previous.estimate?previous.route:null,loading:true}));
       if(event.data.type==='knu:trip-status'&&typeof event.data.status==='string')setTrip(previous=>previous&&({...previous,status:event.data.status.slice(0,500),loading:!event.data.error&&previous.loading}));
@@ -176,10 +180,11 @@ export default function CampusShell({supabaseConfig}) {
     </header>
     {trip&&<section className="class-trip" aria-label="선택한 수업 이동 안내"><div><strong>{trip.row.title} · {new Date(trip.classStart).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</strong>
       {trip.route&&<p className="trip-deadline">{new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}까지 출발 <small>{trip.estimate?'저장된 예상 시간 · ':''}{Math.ceil(trip.route.duration/60)}분 이동 + 내부 {trip.route.indoorMinutes}분 + 여유 {trip.route.safetyMinutes}분</small></p>}
-      <p role="status">{trip.status}</p>{trip.route&&<small>{trip.route.start.name} → {trip.row.place_name} · 예상 시각이며 교통 상황에 따라 달라집니다. 즐겨찾기는 출발지도 함께 저장합니다.</small>}</div><div className="trip-actions">
+      <p role="status">{trip.status}</p><ClassWeather data={weather} departure={trip.route?classTrip.departureAt(trip.classStart,trip.route):Date.parse(trip.classStart)} classStart={trip.classStart}/>{trip.route&&<small>{trip.route.start.name} → {trip.row.place_name} · 예상 시각이며 교통 상황에 따라 달라집니다. 즐겨찾기는 출발지도 함께 저장합니다.</small>}</div><div className="trip-actions">
       <button disabled={busy||(!trip.route&&!trip.row.favorite_route)} onClick={()=>mutate('PUT',{id:trip.row.id,favorite_route:trip.row.favorite_route?null:trip.route})}>{trip.row.favorite_route?'★ 즐겨찾기 해제':'☆ 이 경로 즐겨찾기'}</button><button aria-label="수업 이동 안내 닫기" onClick={()=>setTrip(null)}>닫기</button>
     </div></section>}
     <iframe ref={frame} className="campus-map" src="/map/index.html" title="카카오 캠퍼스 도보 길찾기" onLoad={() => {setReady(false); frame.current?.contentWindow?.postMessage({type:'knu:ping'}, location.origin);}} />
+    <CampusWeather onData={setWeather} hidden={mapPanelOpen||Boolean(trip)}/>
     <dialog ref={dialog} className="timetable-dialog" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}>
       <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => setOpen(false)}>닫기</button></header>
       <p role="status" className="schedule-status">{status}</p>

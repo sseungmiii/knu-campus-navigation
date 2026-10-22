@@ -1,6 +1,7 @@
 const {RouteError, fetchWalkingRoute, searchPlaces} = require('./routing.cjs');
 const mobility = require('./mobility.cjs');
 const {meals}=require('./meals.cjs');
+const {weather}=require('./weather.cjs');
 const origins = new Set(['https://knu-campus-navigation.vercel.app', 'https://sseungmiii.github.io']);
 const requests = new Map();
 function json(res, status, data) {
@@ -9,7 +10,7 @@ function json(res, status, data) {
   res.setHeader('Cache-Control', 'no-store');
   res.end(JSON.stringify(data));
 }
-async function handleApi(kind, req, res, env = process.env, services = {fetchWalkingRoute, searchPlaces, ...mobility, meals}) {
+async function handleApi(kind, req, res, env = process.env, services = {fetchWalkingRoute, searchPlaces, ...mobility, meals,weather}) {
   const origin = req.headers.origin;
   res.setHeader('Vary', 'Origin');
   const localOrigin = env.VERCEL !== '1' && ['127.0.0.1:5174', 'localhost:5174'].includes(req.headers.host) && origin === `http://${req.headers.host}`;
@@ -18,7 +19,7 @@ async function handleApi(kind, req, res, env = process.env, services = {fetchWal
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.statusCode = 204; return res.end(); }
-  const search = ['search','bus','metro','meals'].includes(kind);
+  const search = ['search','bus','metro','meals','weather'].includes(kind);
   if (req.method !== (search ? 'GET' : 'POST')) {
     res.setHeader('Allow', search ? 'GET, OPTIONS' : 'POST, OPTIONS');
     return json(res, 405, {error: '요청 방식을 확인해주세요.'});
