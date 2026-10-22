@@ -169,7 +169,7 @@ window.addEventListener('message', async event => {
   selectPlace('end', {name: place.name, coords: place.coords});
   if(typeof updateDeadline==='function') {const at=Date.parse(event.data.classStart);$('classStart').value=Number.isFinite(at)?new Date(at+9*3600000).toISOString().slice(0,16):'';updateDeadline();}
   if(favorite&&['walk','transit'].includes(favorite.mode)&&['BROAD_FIRST','SHORTEST','ACCESSIBLE'].includes(favorite.routeMode)&&typeof favorite.start?.name==='string'&&Array.isArray(favorite.start.coords)&&favorite.start.coords.length===2&&favorite.start.coords.every(Number.isFinite)&&Math.abs(favorite.start.coords[0])<=90&&Math.abs(favorite.start.coords[1])<=180){
-    $('transportMode').value=favorite.mode;$('walkOptions').hidden=favorite.mode==='transit';$('routeMode').value=favorite.routeMode;
+    $('transportMode').value=favorite.mode;$('walkOptions').hidden=favorite.mode==='transit';$('routeMode').disabled=favorite.mode==='transit';$('routeMode').value=favorite.routeMode;
     $('indoorMinutes').value=Number.isInteger(favorite.indoorMinutes)?Math.max(0,Math.min(30,favorite.indoorMinutes)):3;
     $('safetyMinutes').value=Number.isInteger(favorite.safetyMinutes)?Math.max(0,Math.min(60,favorite.safetyMinutes)):5;
     selectPlace('start',favorite.start);

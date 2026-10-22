@@ -1,7 +1,7 @@
 import classTrip from '../../lib/class-trip.cjs';
 const format=minute=>`${String(Math.floor(minute/60)).padStart(2,'0')}:${String(minute%60).padStart(2,'0')}`;
 export default function WeekCalendar({classes,onSelect,onDay,disabled,selectedId}) {
-  const rows=classTrip.calendarLayout(classes),start=Math.min(9*60,...rows.map(row=>Math.floor(row.start_minute/60)*60)),end=Math.max(18*60,...rows.map(row=>Math.ceil(row.end_minute/60)*60));
+  const rows=classTrip.calendarLayout(classes),start=rows.length?Math.min(...rows.map(row=>Math.floor(row.start_minute/60)*60)):9*60,end=Math.max(18*60,...rows.map(row=>Math.ceil(row.end_minute/60)*60));
   const scale=1.1,height=(end-start)*scale,subjects=[...new Set(classes.map(row=>row.title))].sort();
   return <section className="week-calendar" aria-label="월요일부터 금요일 주간 시간표"><p className="calendar-hint">수업을 누르면 이동 경로와 출발 시각을 확인합니다.</p><div className="calendar-scroll"><div className="calendar-grid">
     <div className="calendar-corner">시간</div>{['월','화','수','목','금'].map((day,index)=><button className="calendar-heading" type="button" key={day} onClick={()=>onDay(index+1)}>{day}</button>)}

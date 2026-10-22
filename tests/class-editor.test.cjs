@@ -5,6 +5,7 @@ assert.equal(editor.defaultEnd('09:00'),'10:15');assert.equal(editor.defaultEnd(
 assert.equal(editor.snapTime(543),'09:05');assert.equal(editor.snapTime(1439),'23:55');
 assert.deepEqual(editor.secondMeeting({weekday:1,start:'09:00',end:'10:15'}),{weekday:3,start:'09:00',end:'10:15'});
 assert.equal(editor.secondMeeting({weekday:7}).weekday,2);
+assert.equal(editor.secondMeeting({weekday:4}).weekday,2);assert.equal(editor.secondMeeting({weekday:5}).weekday,3);
 const common={title:'알고리즘',term:'2026-2',place_name:'IT1호관',latitude:35.889,longitude:128.61,starts_on:'2026-09-01',ends_on:'2026-12-31',owner_id:'forged'};
 const first={weekday:1,start_minute:540,end_minute:615},second={weekday:3,start_minute:630,end_minute:705};
 const rows=validateClassMeetings({...common,meetings:[first,second]});
