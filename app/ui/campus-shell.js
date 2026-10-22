@@ -19,7 +19,7 @@ export default function CampusShell({supabaseConfig}) {
   const [weekday, setWeekday] = useState(1), [form, setForm] = useState(emptyForm), [editing, setEditing] = useState(null);
   const [placeQuery, setPlaceQuery] = useState(''), [place, setPlace] = useState(null), [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false), [deleteId, setDeleteId] = useState(null), [refreshIndex, setRefreshIndex] = useState(0);
-  const [authMode,setAuthMode]=useState('login'),[confirmationEmail,setConfirmationEmail]=useState('');
+  const [authMode,setAuthMode]=useState('login');
   userRef.current = user;
   const next = now ? timetable.upcomingClass(classes, now) : null;
   useEffect(() => {
@@ -62,28 +62,23 @@ export default function CampusShell({supabaseConfig}) {
     event.preventDefault(); if (!supabase || busy) return;
     const data = new FormData(event.currentTarget); setBusy(true); setStatus('로그인 중…');
     try {
-      const {error} = await supabase.auth.signInWithPassword({email: String(data.get('email')).trim(), password: String(data.get('password'))});
-      if (error) {if(error.code==='email_not_confirmed')setConfirmationEmail(String(data.get('email')).trim());setStatus(error.code==='email_not_confirmed'?auth.authErrorMessage(error):'로그인하지 못했습니다. 이메일과 비밀번호를 확인해주세요.');}
+      const {error} = await supabase.auth.signInWithPassword({email: auth.loginEmail(data.get('identifier')), password: String(data.get('password'))});
+      if (error) setStatus('로그인하지 못했습니다. 아이디와 비밀번호를 확인해주세요.');
       else setStatus('시간표 접근 권한을 확인 중…');
     } catch {setStatus('로그인 서버에 연결하지 못했습니다.');} finally {setBusy(false);}
   }
   async function signup(event) {
     event.preventDefault();if(!supabase||busy)return;
     const formElement=event.currentTarget,values=new FormData(formElement);let credentials;
-    try{credentials=auth.validateSignup({email:values.get('email'),password:values.get('password'),confirmation:values.get('confirmation')});}catch(error){setStatus(error.message);return;}
+    try{credentials=auth.validateSignup({identifier:values.get('identifier'),password:values.get('password'),confirmation:values.get('confirmation')});}catch(error){setStatus(error.message);return;}
     setBusy(true);setStatus('가입 요청 중…');
     try{
-      const {data,error}=await supabase.auth.signUp({...credentials,options:{emailRedirectTo:`${location.origin}/auth/callback`}});
+      const {data,error}=await supabase.auth.signUp(credentials);
       if(error){setStatus(auth.authErrorMessage(error));return;}
-      formElement.reset();setConfirmationEmail(credentials.email);
+      formElement.reset();
       if(data.session){setStatus('가입되었습니다. 시간표 이용 권한을 확인합니다.');}
-      else{setAuthMode('login');setStatus('가입 요청을 접수했습니다. 이메일의 인증 링크를 누른 후 로그인해주세요. 이미 가입한 이메일이라면 로그인을 이용해주세요.');}
+      else{setAuthMode('login');setStatus('가입되었습니다. 아이디와 비밀번호로 로그인해주세요.');}
     }catch{setStatus('회원가입 서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.');}finally{setBusy(false);}
-  }
-  async function resendConfirmation() {
-    if(!supabase||busy||!confirmationEmail)return;setBusy(true);
-    try{const {error}=await supabase.auth.resend({type:'signup',email:confirmationEmail,options:{emailRedirectTo:`${location.origin}/auth/callback`}});setStatus(error?auth.authErrorMessage(error):'인증 메일을 요청했습니다. 받은편지함과 스팸함을 확인해주세요.');}
-    catch{setStatus('인증 메일을 요청하지 못했습니다. 잠시 후 다시 시도해주세요.');}finally{setBusy(false);}
   }
   async function logout() {
     setBusy(true); const {error} = await supabase.auth.signOut({scope:'local'});
@@ -143,11 +138,10 @@ export default function CampusShell({supabaseConfig}) {
       <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => setOpen(false)}>닫기</button></header>
       {!supabase ? <p>시간표 서버 연결을 준비 중입니다. 지도 길찾기는 이용할 수 있습니다.</p> : authLoading ? <p>로그인 확인 중…</p> : !user ? <>
         <div className="auth-tabs" role="group" aria-label="계정 이용"><button type="button" disabled={busy} aria-pressed={authMode==='login'} onClick={()=>{setAuthMode('login');setStatus('');}}>로그인</button><button type="button" disabled={busy} aria-pressed={authMode==='signup'} onClick={()=>{setAuthMode('signup');setStatus('');}}>회원가입</button></div>
-        <p className="muted">{authMode==='signup'?'이메일과 비밀번호로 가입하세요. 이메일 인증 후 나만의 시간표를 관리할 수 있습니다.':'로그인하면 저장한 수업과 장소를 불러옵니다.'}</p>
-        <form key={authMode} onSubmit={authMode==='signup'?signup:login} className="schedule-form"><fieldset disabled={busy}><label>이메일<input name="email" type="email" autoComplete="email" maxLength={254} defaultValue={confirmationEmail} required /></label><label>비밀번호<input name="password" type="password" autoComplete={authMode==='signup'?'new-password':'current-password'} minLength={authMode==='signup'?8:undefined} aria-describedby={authMode==='signup'?'signup-password-help':undefined} required /></label>{authMode==='signup'&&<><p id="signup-password-help" className="auth-help">비밀번호는 8자 이상으로 입력해주세요.</p><label>비밀번호 확인<input name="confirmation" type="password" autoComplete="new-password" minLength={8} required /></label></>}<button className="accent" disabled={busy}>{busy?'처리 중…':authMode==='signup'?'가입하고 인증 메일 받기':'로그인'}</button></fieldset></form>
-        {confirmationEmail&&<button className="auth-resend" type="button" disabled={busy} onClick={resendConfirmation}>인증 메일 다시 받기</button>}
+        <p className="muted">{authMode==='signup'?'아이디와 비밀번호로 가입하면 바로 나만의 시간표를 관리할 수 있습니다.':'로그인하면 저장한 수업과 장소를 불러옵니다.'}</p>
+        <form key={authMode} onSubmit={authMode==='signup'?signup:login} className="schedule-form"><fieldset disabled={busy}><label>{authMode==='signup'?'아이디':'아이디 또는 기존 이메일'}<input name="identifier" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={authMode==='signup'?24:254} required /></label><label>비밀번호<input name="password" type="password" autoComplete={authMode==='signup'?'new-password':'current-password'} minLength={authMode==='signup'?8:undefined} aria-describedby={authMode==='signup'?'signup-password-help':undefined} required /></label>{authMode==='signup'&&<><p id="signup-password-help" className="auth-help">아이디: 영문·숫자·_·- 3~24자 · 비밀번호: 8자 이상</p><label>비밀번호 확인<input name="confirmation" type="password" autoComplete="new-password" minLength={8} required /></label></>}<button className="accent" disabled={busy}>{busy?'처리 중…':authMode==='signup'?'회원가입':'로그인'}</button></fieldset></form>
       </> : <>
-        <div className="account-row"><span>{user.email}</span><button disabled={busy} onClick={logout}>로그아웃</button></div>
+        <div className="account-row"><span>{auth.displayIdentifier(user.email)}</span><button disabled={busy} onClick={logout}>로그아웃</button></div>
         {!allowed && <button disabled={busy} onClick={() => setRefreshIndex(value => value + 1)}>접근 권한 다시 확인</button>}
         {allowed && <>
           <nav className="day-tabs" aria-label="시간표 요일">{days.map((day,index) => <button key={day} aria-pressed={weekday === index + 1} onClick={() => setWeekday(index + 1)}>{day}</button>)}</nav>
