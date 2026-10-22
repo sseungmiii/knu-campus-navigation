@@ -2,7 +2,8 @@ import {NextResponse} from 'next/server';
 import {createClient} from '../../../lib/supabase/server';
 import timetable from '../../../lib/timetable.cjs';
 import requestOrigin from '../../../lib/request-origin.cjs';
-const fields = 'id,title,term,weekday,start_minute,end_minute,place_name,latitude,longitude,starts_on,ends_on';
+import classTrip from '../../../lib/class-trip.cjs';
+const fields = 'id,title,term,weekday,start_minute,end_minute,place_name,latitude,longitude,starts_on,ends_on,favorite_route';
 const json = (data, status = 200) => NextResponse.json(data, {status, headers: {'Cache-Control': 'private, no-store'}});
 async function authorized() {
   const supabase = await createClient();
@@ -40,6 +41,19 @@ async function write(request, method) {
     if (result.error) return json({error: '수업을 삭제하지 못했습니다.'}, 503);
     return result.data.length ? json({ok: true}) : json({error: '수업을 찾지 못했습니다.'}, 404);
   }
+  if(method==='PUT') {
+    let favorite;try{favorite=classTrip.validateFavorite(input.favorite_route);}catch(error){return json({error:error.message},400);}
+    const result=await auth.supabase.from('timetable_classes').update({favorite_route:favorite}).eq('id',input.id).eq('owner_id',auth.user.id).select(fields).maybeSingle();
+    if(result.error)return json({error:'즐겨찾기를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'},503);
+    return result.data?json({class:result.data}):json({error:'수업을 찾지 못했습니다.'},404);
+  }
+  if (method === 'POST' && Object.hasOwn(input || {}, 'meetings')) {
+    let rows; try { rows = timetable.validateClassMeetings(input); } catch (error) { return json({error: error.message}, 400); }
+    // One INSERT: either both meetings are stored or neither is stored; RLS applies to every row.
+    const result = await auth.supabase.from('timetable_classes').insert(rows.map(row => ({...row, owner_id:auth.user.id}))).select(fields);
+    if (result.error) return json({error:'수업을 저장하지 못했습니다. 입력 내용과 이용 권한을 확인해주세요.'},503);
+    return json({classes:result.data},201);
+  }
   let row; try { row = timetable.validateClass(input); } catch (error) { return json({error: error.message}, 400); }
   const query = method === 'POST' ? auth.supabase.from('timetable_classes').insert({...row, owner_id: auth.user.id}) : auth.supabase.from('timetable_classes').update(row).eq('id', input.id).eq('owner_id', auth.user.id);
   const result = await query.select(fields).maybeSingle();
@@ -49,3 +63,4 @@ async function write(request, method) {
 export const POST = request => write(request, 'POST');
 export const PATCH = request => write(request, 'PATCH');
 export const DELETE = request => write(request, 'DELETE');
+export const PUT = request => write(request, 'PUT');

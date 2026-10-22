@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 const callbacks = {}, elements = new Map();
-const parent = {postMessage() {}};
+const posted=[];const parent = {postMessage(message) {posted.push(message);}};
 const context = vm.createContext({ROUTING_API_BASE_URL:'', location:{hostname:'127.0.0.1',origin:'http://127.0.0.1:5174'}, window:{parent,addEventListener(name,fn){callbacks[name]=fn;}}, document:{getElementById(id){if(!elements.has(id)) elements.set(id,{classList:{toggle(){}},replaceChildren(){},value:''});return elements.get(id);}}});
 vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../src/app.js'),'utf8'),context);
 vm.runInContext('map = {}; pacemaker = {stop(){}};',context);
@@ -12,3 +12,14 @@ send({type:'knu:destination',place:{...place,coords:[Infinity,128]}});assert.equ
 send({type:'knu:destination',place}); assert.equal(elements.get('endQuery').value,place.name);
 assert.ok(elements.get('routeMessage').textContent.includes('출발지'));
 console.log('PASS: timetable destination handoff, iframe source/origin validation and invalid coordinate rejection');
+(async()=>{
+  vm.runInContext('let routeQueries=0; findRoute=async()=>{routeQueries++;};',context);
+  const favorite={start:{name:'즐겨찾기 출발지',coords:[35.88,128.61]},mode:'transit',routeMode:'BROAD_FIRST',signature:'BUS:937:123',duration:1800,indoorMinutes:4,safetyMinutes:6};
+  await send({type:'knu:destination',classId:'class-a',place,classStart:'2026-10-26T00:00:00Z',favorite});
+  assert.equal(elements.get('startQuery').value,'즐겨찾기 출발지');assert.equal(elements.get('transportMode').value,'transit');assert.equal(elements.get('indoorMinutes').value,4);assert.equal(vm.runInContext('routeQueries',context),1);
+  vm.runInContext("selectedRoute={duration:1800,steps:[{type:'BUS',vehicles:['937'],boardingStop:{id:'123'}}]};notifyClassRoute();",context);
+  const route=posted.findLast(message=>message.type==='knu:class-route');assert.equal(route.classId,'class-a');assert.equal(route.route.signature,'BUS:937:123');assert.deepEqual(Array.from(route.end),place.coords);
+  vm.runInContext("getPosition=async()=>{throw new Error('위치 거부');};",context);
+  await send({type:'knu:destination',classId:'class-b',place,useCurrentLocation:true});assert.match(elements.get('routeMessage').textContent,/출발지를 검색/);assert.equal(vm.runInContext('routeQueries',context),1,'Denied GPS must not silently route from an old location');
+  console.log('PASS: favorite origin/mode restore, course-specific route message and GPS denial without stale-origin routing');
+})().catch(error=>{console.error(error);process.exit(1);});

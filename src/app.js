@@ -1,16 +1,23 @@
 let map, pacemaker;
 const places = {start: null, end: null};
 let selectedRoute = null, routeController = null, routeGeneration = 0, positionGeneration = 0;
+let activeClassId=null, preferredClassRoute=null;
 const layers = [];
 const searchGenerations = {start: 0, end: 0};
 const $ = id => document.getElementById(id);
 const apiBase = ROUTING_API_BASE_URL.replace(/\/$/, '');
 const localBackend = ['127.0.0.1', 'localhost'].includes(location.hostname);
 const hasBackend = Boolean(apiBase) || localBackend || location.hostname === 'knu-campus-navigation.vercel.app';
-function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); }
+function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); if(activeClassId)window.parent.postMessage({type:'knu:trip-status',classId:activeClassId,status:text,error},location.origin); }
+function classRouteSignature(route) {return (route.steps||[]).filter(step=>step.type!=='WALKING').map(step=>`${step.type}:${(step.vehicles||[]).join('/')}:${step.boardingStop?.id||step.stops?.[0]||''}`).join('|').slice(0,500);}
+function notifyClassRoute() {
+  if(!activeClassId||!selectedRoute||!places.start||!places.end)return;
+  window.parent.postMessage({type:'knu:class-route',classId:activeClassId,end:places.end.coords,route:{start:places.start,mode:$('transportMode').value,routeMode:$('routeMode').value,duration:selectedRoute.duration,signature:classRouteSignature(selectedRoute),indoorMinutes:Number($('indoorMinutes').value),safetyMinutes:Number($('safetyMinutes').value)}},location.origin);
+}
 function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`; }
 function updateReady() { $('findRoute').disabled = !map || !places.start || !places.end; }
 function clearRoute() {
+  if(activeClassId)window.parent.postMessage({type:'knu:route-pending',classId:activeClassId},location.origin);
   if(typeof mobilityClear==='function')mobilityClear();
   routeGeneration++; routeController?.abort(); routeController = null;
   pacemaker?.stop(); selectedRoute = null; layers.splice(0).forEach(layer => layer.remove());
@@ -148,16 +155,29 @@ async function init() {
   updateReady();
   window.parent.postMessage({type: 'knu:map-ready'}, location.origin);
 }
-window.addEventListener('message', event => {
+window.addEventListener('message', async event => {
   if (event.source !== window.parent || event.origin !== location.origin) return;
   if (event.data?.type === 'knu:ping') {if (map && pacemaker) window.parent.postMessage({type:'knu:map-ready'}, location.origin); return;}
   if (event.data?.type !== 'knu:destination' || !map || !pacemaker) return;
   const place = event.data.place;
   if (typeof place?.name !== 'string' || !place.name.trim() || place.name.length > 150 || !Array.isArray(place.coords) || place.coords.length !== 2 || !place.coords.every(Number.isFinite) || Math.abs(place.coords[0]) > 90 || Math.abs(place.coords[1]) > 180) return;
+  activeClassId=typeof event.data.classId==='string'?event.data.classId:null;
+  const favorite=event.data.favorite;
+  preferredClassRoute=favorite&&typeof favorite.signature==='string'?favorite:null;
   if(typeof showPurpose==='function')showPurpose('route');
   $('departurePanel').open=true;
   selectPlace('end', {name: place.name, coords: place.coords});
   if(typeof updateDeadline==='function') {const at=Date.parse(event.data.classStart);$('classStart').value=Number.isFinite(at)?new Date(at+9*3600000).toISOString().slice(0,16):'';updateDeadline();}
+  if(favorite&&['walk','transit'].includes(favorite.mode)&&['BROAD_FIRST','SHORTEST','ACCESSIBLE'].includes(favorite.routeMode)&&typeof favorite.start?.name==='string'&&Array.isArray(favorite.start.coords)&&favorite.start.coords.length===2&&favorite.start.coords.every(Number.isFinite)&&Math.abs(favorite.start.coords[0])<=90&&Math.abs(favorite.start.coords[1])<=180){
+    $('transportMode').value=favorite.mode;$('walkOptions').hidden=favorite.mode==='transit';$('routeMode').value=favorite.routeMode;
+    $('indoorMinutes').value=Number.isInteger(favorite.indoorMinutes)?Math.max(0,Math.min(30,favorite.indoorMinutes)):3;
+    $('safetyMinutes').value=Number.isInteger(favorite.safetyMinutes)?Math.max(0,Math.min(60,favorite.safetyMinutes)):5;
+    selectPlace('start',favorite.start);
+  }else if(event.data.useCurrentLocation){
+    const generation=++positionGeneration;message('수업 길찾기를 위해 현재 위치를 확인하고 있습니다.');
+    try{const position=await getPosition();if(generation!==positionGeneration)return;selectPlace('start',{name:'현재 위치',coords:[position.coords.latitude,position.coords.longitude]});}
+    catch(error){if(generation===positionGeneration)message(`${error.message} 지도에서 출발지를 검색한 뒤 경로를 찾으면 출발 시각이 표시됩니다.`,true);return;}
+  }
   if (places.start) findRoute({preventDefault() {}});
   else message(`${place.name}을 도착지로 선택했습니다. 출발지 또는 현재 위치를 선택해주세요.`);
 });

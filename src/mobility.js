@@ -10,6 +10,7 @@ function mobilityClear() {
   $('nearbyMessage').textContent='경로를 찾은 뒤 시설을 검색하세요.'; $('deadlineStatus').textContent='수업 시각과 경로를 선택하면 출발 마감 시각을 계산합니다.';
 }
 function updateDeadline() {
+  if(typeof notifyClassRoute==='function')notifyClassRoute();
   const plan=selectedRoute&&departurePlan($('classStart').value ? `${$('classStart').value}:00+09:00` : '',selectedRoute.duration,$('safetyMinutes').value,$('indoorMinutes').value);
   if(!plan){$('deadlineStatus').textContent='수업 시각과 경로를 선택하면 출발 마감 시각을 계산합니다.';return;}
   $('deadlineStatus').textContent=`${kstTime(plan.deadline)}까지 출발 · ${plan.remainingMinutes>=0?`약 ${plan.remainingMinutes}분 남음`:`출발 마감 ${-plan.remainingMinutes}분 경과`} · 건물 내부 ${$('indoorMinutes').value}분 + 여유 ${$('safetyMinutes').value}분 포함. 예상 시간으로, 도착을 보장하지 않습니다.`;
@@ -75,7 +76,9 @@ function renderTransitOptions() {
   for(const [index,route] of candidates.entries()){
     const button=transitCard(route,fastest);button.onclick=()=>selectTransit(route,start,end,index);$('transitOptions').append(button);
   }
-  selectTransit(candidates[0],start,end,0);
+  const preferred=typeof preferredClassRoute!=='undefined'&&preferredClassRoute?.mode==='transit'?candidates.findIndex(route=>classRouteSignature(route)===preferredClassRoute.signature):-1;
+  selectTransit(candidates[Math.max(0,preferred)],start,end,Math.max(0,preferred));
+  if(preferred<0&&typeof preferredClassRoute!=='undefined'&&preferredClassRoute?.mode==='transit')message('즐겨찾기와 같은 노선이 현재 조회되지 않아 다른 경로를 표시했습니다. 이동 안내를 확인해주세요.');
 }
 async function transitSearch(start,end,generation) {
   mobilityController=new AbortController();const controller=mobilityController;

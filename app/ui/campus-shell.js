@@ -3,6 +3,9 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {createClient} from '../../lib/supabase/client';
 import timetable from '../../lib/timetable.cjs';
 import auth from '../../lib/auth.cjs';
+import classEditor from '../../lib/class-editor.cjs';
+import classTrip from '../../lib/class-trip.cjs';
+import WeekCalendar from './week-calendar';
 const days = ['월', '화', '수', '목', '금', '토', '일'];
 const time = minute => `${String(Math.floor(minute / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
 const minutes = value => Number(value.split(':')[0]) * 60 + Number(value.split(':')[1]);
@@ -10,9 +13,16 @@ function emptyForm() {
   const {date} = timetable.koreaClock(); const year = date.slice(0,4), second = Number(date.slice(5,7)) >= 7;
   return {title: '', term: `${year}년 ${second ? 2 : 1}학기`, weekday: timetable.koreaClock().weekday, start: '09:00', end: '10:15', starts_on: `${year}-${second ? '08-01' : '03-01'}`, ends_on: `${year}-${second ? '12-31' : '06-30'}`};
 }
+function TimePicker({label,value,onChange}) {
+  const [hour,minute]=value.split(':');
+  return <div className="time-picker" role="group" aria-label={label}><span>{label}</span><div className="time-parts">
+    <select aria-label={`${label} 시`} value={hour} onChange={event=>onChange(`${event.target.value}:${minute}`)}>{classEditor.HOURS.map(item=><option key={item} value={item}>{item}시</option>)}</select>
+    <select aria-label={`${label} 분`} value={minute} onChange={event=>onChange(`${hour}:${event.target.value}`)}>{classEditor.MINUTES.map(item=><option key={item} value={item}>{item}분</option>)}</select>
+  </div></div>;
+}
 export default function CampusShell({supabaseConfig}) {
   const supabase = useMemo(() => supabaseConfig ? createClient(supabaseConfig) : null, [supabaseConfig]);
-  const frame = useRef(null), dialog = useRef(null), searchGeneration = useRef(0), userRef = useRef(null);
+  const frame = useRef(null), dialog = useRef(null), editorSection=useRef(null), searchGeneration = useRef(0), userRef = useRef(null);
   const [open, setOpen] = useState(false), [ready, setReady] = useState(false), [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(Boolean(supabase)), [busy, setBusy] = useState(false), [status, setStatus] = useState('');
   const [classes, setClasses] = useState([]), [allowed, setAllowed] = useState(false), [now, setNow] = useState(null);
@@ -20,6 +30,11 @@ export default function CampusShell({supabaseConfig}) {
   const [placeQuery, setPlaceQuery] = useState(''), [place, setPlace] = useState(null), [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false), [deleteId, setDeleteId] = useState(null), [refreshIndex, setRefreshIndex] = useState(0);
   const [authMode,setAuthMode]=useState('login');
+  const [second,setSecond]=useState(null);
+  const [calendarTerm,setCalendarTerm]=useState(''),[trip,setTrip]=useState(null);
+  const tripRef=useRef(null);tripRef.current=trip;
+  const terms=[...new Set(classes.map(row=>row.term))];
+  const visibleTerm=calendarTerm&&terms.includes(calendarTerm)?calendarTerm:classes.find(row=>now&&row.starts_on<=timetable.koreaClock(now).date&&row.ends_on>=timetable.koreaClock(now).date)?.term||terms[0]||'';
   userRef.current = user;
   const next = now ? timetable.upcomingClass(classes, now) : null;
   useEffect(() => {
@@ -27,7 +42,18 @@ export default function CampusShell({supabaseConfig}) {
     const params=new URLSearchParams(location.search),result=params.get('auth');
     if(result){setOpen(true);setStatus(result==='confirmed'?'이메일 인증을 완료했습니다. 시간표를 이용하려면 로그인해주세요.':'인증 링크가 만료되었거나 확인하지 못했습니다. 가입한 브라우저에서 링크를 열거나 인증 메일을 다시 받아주세요.');params.delete('auth');history.replaceState(null,'',location.pathname+(params.size?'?'+params:'')+location.hash);}
     const timer = setInterval(() => setNow(new Date()), 30000);
-    const receive = event => { if (event.origin === location.origin && event.source === frame.current?.contentWindow && event.data?.type === 'knu:map-ready') setReady(true); };
+    const receive = event => {
+      if(event.origin!==location.origin||event.source!==frame.current?.contentWindow)return;
+      if(event.data?.type==='knu:map-ready'){setReady(true);return;}
+      const active=tripRef.current;if(!active||event.data?.classId!==active.row.id)return;
+      if(event.data.type==='knu:route-pending')setTrip(previous=>previous&&({...previous,route:previous.estimate?previous.route:null,loading:true}));
+      if(event.data.type==='knu:trip-status'&&typeof event.data.status==='string')setTrip(previous=>previous&&({...previous,status:event.data.status.slice(0,500),loading:!event.data.error&&previous.loading}));
+      if(event.data.type==='knu:class-route'){
+        const end=event.data.end;
+        if(!Array.isArray(end)||end.length!==2||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;
+        try{const route=classTrip.validateFavorite(event.data.route);if(route)setTrip(previous=>previous&&({...previous,route,loading:false,estimate:false,status:'경로를 조회했습니다. 이동 안내는 지도에서 확인하세요.'}));}catch{/* Ignore invalid map messages. */}
+      }
+    };
     window.addEventListener('message', receive);
     return () => {clearInterval(timer); window.removeEventListener('message', receive);};
   }, []);
@@ -47,7 +73,7 @@ export default function CampusShell({supabaseConfig}) {
     return () => {alive = false; listener.subscription.unsubscribe();};
   }, [supabase]);
   useEffect(() => {
-    setClasses([]); setAllowed(false); setEditing(null); setForm(emptyForm()); setPlace(null); setPlaceQuery(''); setResults([]); setDeleteId(null); setSearching(false); searchGeneration.current++;
+    setClasses([]); setAllowed(false); setTrip(null); setEditing(null); setForm(emptyForm()); setSecond(null); setPlace(null); setPlaceQuery(''); setResults([]); setDeleteId(null); setSearching(false); searchGeneration.current++;
     if (!user) return;
     const controller = new AbortController();
     setStatus('시간표를 불러오는 중…');
@@ -88,7 +114,7 @@ export default function CampusShell({supabaseConfig}) {
   }
   function edit(row) {
     searchGeneration.current++; setResults([]); setSearching(false); setDeleteId(null);
-    setEditing(row?.id || null); setForm(row ? {...row, start: time(row.start_minute), end: time(row.end_minute)} : emptyForm());
+    setEditing(row?.id || null); setSecond(null); setForm(row ? {...row, start: classEditor.snapTime(row.start_minute), end: classEditor.snapTime(row.end_minute)} : emptyForm());
     setPlace(row ? {name: row.place_name, coords: [row.latitude,row.longitude]} : null); setPlaceQuery(row?.place_name || '');
   }
   async function searchPlace() {
@@ -108,34 +134,55 @@ export default function CampusShell({supabaseConfig}) {
     try {
       const response = await fetch('/api/timetable', {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(input)});
       const data = await response.json(); if (userRef.current?.id !== currentUser) return;
-      if (!response.ok) {setStatus(data.error || '변경하지 못했습니다.'); return;}
-      setClasses(previous => method === 'DELETE' ? previous.filter(row => row.id !== input.id) : [...previous.filter(row => row.id !== data.class.id), data.class]);
-      edit(null); setStatus(method === 'DELETE' ? '수업을 삭제했습니다.' : '수업을 저장했습니다.');
-    } catch {if (userRef.current?.id === currentUser) setStatus('시간표 서버에 연결하지 못했습니다.');}
+      if (!response.ok) {setStatus(data.error || '변경하지 못했습니다.');if(method==='PUT')setTrip(previous=>previous&&({...previous,status:data.error||'즐겨찾기를 저장하지 못했습니다.'}));return;}
+      const saved=data.classes || (data.class ? [data.class] : []);
+      setClasses(previous => method === 'DELETE' ? previous.filter(row => row.id !== input.id) : [...previous.filter(row => !saved.some(item=>item.id===row.id)), ...saved]);
+      if(method==='PUT'){setStatus('즐겨찾기를 변경했습니다.');setTrip(previous=>previous&&({...previous,row:saved[0],status:input.favorite_route?'즐겨찾기에 저장했습니다. 다음에는 수업을 누르면 이 출발지와 이동 수단을 사용합니다.':'즐겨찾기 경로를 해제했습니다.'}));return;}
+      if(saved.length){setWeekday(saved[0].weekday);setCalendarTerm(saved[0].term);}
+      edit(null); setStatus(method === 'DELETE' ? '수업을 삭제했습니다.' : `${saved.length===2?'주 2회 수업을':'수업을'} 저장했습니다.`);dialog.current?.scrollTo({top:0});
+    } catch {if (userRef.current?.id === currentUser) {setStatus('시간표 서버에 연결하지 못했습니다.');if(method==='PUT')setTrip(previous=>previous&&({...previous,status:'즐겨찾기를 저장하지 못했습니다. 연결을 확인한 뒤 다시 시도해주세요.'}));}}
     finally {setBusy(false);}
   }
   function save(event) {
-    event.preventDefault(); if (!place) {setStatus('강의 장소를 검색 결과에서 선택해주세요.'); return;}
+    event.preventDefault(); if (!place) {setStatus('강의 장소를 검색 결과에서 선택해주세요.');dialog.current?.scrollTo({top:0}); return;}
     try {
       const input = timetable.validateClass({...form, weekday: Number(form.weekday), start_minute: minutes(form.start), end_minute: minutes(form.end), place_name: place.name, latitude: place.coords[0], longitude: place.coords[1]});
-      mutate(editing ? 'PATCH' : 'POST', {...input, ...(editing ? {id: editing} : {})});
-    } catch (error) {setStatus(error.message);}
+      if(editing) mutate('PATCH',{...input,id:editing});
+      else {
+        const meetings=[{weekday:input.weekday,start_minute:input.start_minute,end_minute:input.end_minute},...(second?[{weekday:Number(second.weekday),start_minute:minutes(second.start),end_minute:minutes(second.end)}]:[])];
+        const payload={...input,meetings};timetable.validateClassMeetings(payload);mutate('POST',payload);
+      }
+    } catch (error) {setStatus(error.message);dialog.current?.scrollTo({top:0});}
   }
   function navigate(row) {
     if (!ready) return;
-    frame.current.contentWindow.postMessage({type:'knu:destination', place: {name: row.place_name, coords: [row.latitude,row.longitude]}, course: row.title, classStart:timetable.nextOccurrence(row)}, location.origin);
+    const classStart=timetable.nextOccurrence(row);
+    if(!classStart){setStatus('학기 기간이 지난 수업입니다. 학기 날짜를 수정해주세요.');return;}
+    let favorite=null;try{if(row.favorite_route)favorite=classTrip.validateFavorite(row.favorite_route);}catch{/* Old or invalid preference: request a fresh route. */}
+    const active={row,classStart,route:favorite,estimate:Boolean(favorite),loading:true,status:favorite?'저장된 출발지에서 즐겨찾기 경로를 다시 조회합니다.':'현재 위치를 확인해 출발 시각을 계산합니다. 위치 사용이 어려우면 지도에서 출발지를 검색해주세요.'};setTrip(active);tripRef.current=active;
+    frame.current.contentWindow.postMessage({type:'knu:destination',classId:row.id,place:{name:row.place_name,coords:[row.latitude,row.longitude]},course:row.title,classStart,favorite,useCurrentLocation:!favorite},location.origin);
     setOpen(false);
   }
   const change = key => event => setForm(previous => ({...previous, [key]: event.target.value}));
+  const changeTime = (key,value,extra=false) => {
+    const update=previous=>({...previous,[key]:value,...(key==='start'?{end:classEditor.defaultEnd(value)}:{})});
+    if(extra)setSecond(update);else setForm(update);
+  };
   return <main className="campus-shell">
     <header className="account-bar">
       <div className="next-class"><strong>{next ? `다음 수업 · ${next.title}` : '내 시간표로 길찾기'}</strong><span>{next ? `${time(next.start_minute)} · ${next.place_name}` : '수업을 등록하면 오늘의 이동을 바로 준비할 수 있어요.'}</span></div>
       {next && <button disabled={!ready} onClick={() => navigate(next)}>수업으로 길찾기</button>}
       <button className="accent" onClick={() => setOpen(true)}>{user ? '내 시간표' : '로그인 · 회원가입'}</button>
     </header>
+    {trip&&<section className="class-trip" aria-label="선택한 수업 이동 안내"><div><strong>{trip.row.title} · {new Date(trip.classStart).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</strong>
+      {trip.route&&<p className="trip-deadline">{new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}까지 출발 <small>{trip.estimate?'저장된 예상 시간 · ':''}{Math.ceil(trip.route.duration/60)}분 이동 + 내부 {trip.route.indoorMinutes}분 + 여유 {trip.route.safetyMinutes}분</small></p>}
+      <p role="status">{trip.status}</p>{trip.route&&<small>{trip.route.start.name} → {trip.row.place_name} · 예상 시각이며 교통 상황에 따라 달라집니다. 즐겨찾기는 출발지도 함께 저장합니다.</small>}</div><div className="trip-actions">
+      <button disabled={busy||(!trip.route&&!trip.row.favorite_route)} onClick={()=>mutate('PUT',{id:trip.row.id,favorite_route:trip.row.favorite_route?null:trip.route})}>{trip.row.favorite_route?'★ 즐겨찾기 해제':'☆ 이 경로 즐겨찾기'}</button><button aria-label="수업 이동 안내 닫기" onClick={()=>setTrip(null)}>닫기</button>
+    </div></section>}
     <iframe ref={frame} className="campus-map" src="/map/index.html" title="카카오 캠퍼스 도보 길찾기" onLoad={() => {setReady(false); frame.current?.contentWindow?.postMessage({type:'knu:ping'}, location.origin);}} />
     <dialog ref={dialog} className="timetable-dialog" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}>
       <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => setOpen(false)}>닫기</button></header>
+      <p role="status" className="schedule-status">{status}</p>
       {!supabase ? <p>시간표 서버 연결을 준비 중입니다. 지도 길찾기는 이용할 수 있습니다.</p> : authLoading ? <p>로그인 확인 중…</p> : !user ? <>
         <div className="auth-tabs" role="group" aria-label="계정 이용"><button type="button" disabled={busy} aria-pressed={authMode==='login'} onClick={()=>{setAuthMode('login');setStatus('');}}>로그인</button><button type="button" disabled={busy} aria-pressed={authMode==='signup'} onClick={()=>{setAuthMode('signup');setStatus('');}}>회원가입</button></div>
         <p className="muted">{authMode==='signup'?'아이디와 비밀번호로 가입하면 바로 나만의 시간표를 관리할 수 있습니다.':'로그인하면 저장한 수업과 장소를 불러옵니다.'}</p>
@@ -144,20 +191,32 @@ export default function CampusShell({supabaseConfig}) {
         <div className="account-row"><span>{auth.displayIdentifier(user.email)}</span><button disabled={busy} onClick={logout}>로그아웃</button></div>
         {!allowed && <button disabled={busy} onClick={() => setRefreshIndex(value => value + 1)}>접근 권한 다시 확인</button>}
         {allowed && <>
+          <div className="calendar-title"><h2>주간 시간표</h2><button type="button" onClick={()=>{edit(null);editorSection.current?.scrollIntoView({block:'start'});}}>+ 수업 추가</button></div>
+          {terms.length>1&&<label className="calendar-term">시간표 학기<select value={visibleTerm} onChange={event=>setCalendarTerm(event.target.value)}>{terms.map(term=><option key={term}>{term}</option>)}</select></label>}
+          <WeekCalendar classes={classes.filter(row=>row.term===visibleTerm)} disabled={!ready||busy} selectedId={trip?.row.id} onSelect={navigate} onDay={setWeekday}/>
           <nav className="day-tabs" aria-label="시간표 요일">{days.map((day,index) => <button key={day} aria-pressed={weekday === index + 1} onClick={() => setWeekday(index + 1)}>{day}</button>)}</nav>
           <section aria-label={`${days[weekday - 1]}요일 수업`} className="class-list">
-            {classes.filter(row => row.weekday === weekday).sort((a,b) => a.start_minute - b.start_minute).map(row => <article key={row.id} className="class-card">
+            {classes.filter(row => row.weekday === weekday&&row.term===visibleTerm).sort((a,b) => a.start_minute - b.start_minute).map(row => <article key={row.id} className="class-card">
               <h2>{row.title}</h2><p>{time(row.start_minute)}–{time(row.end_minute)} · {row.place_name}</p><small>{row.term} · {row.starts_on}–{row.ends_on}</small>
-              <div className="class-actions"><button disabled={!ready || busy} onClick={() => navigate(row)}>이 수업으로 길찾기</button><button disabled={busy} onClick={() => edit(row)}>수정</button>{deleteId === row.id ? <><button disabled={busy} onClick={() => mutate('DELETE', {id: row.id})}>삭제 확인</button><button onClick={() => setDeleteId(null)}>취소</button></> : <button disabled={busy} onClick={() => setDeleteId(row.id)}>삭제</button>}</div>
+              <div className="class-actions"><button disabled={!ready || busy} onClick={() => navigate(row)}>이 수업으로 길찾기</button><button disabled={busy} onClick={() => {edit(row);editorSection.current?.scrollIntoView({block:'start'});}}>수정</button>{deleteId === row.id ? <><button disabled={busy} onClick={() => mutate('DELETE', {id: row.id})}>삭제 확인</button><button onClick={() => setDeleteId(null)}>취소</button></> : <button disabled={busy} onClick={() => setDeleteId(row.id)}>삭제</button>}</div>
             </article>)}
-            {!classes.some(row => row.weekday === weekday) && <p className="muted">등록된 수업이 없습니다. 아래에서 추가해주세요.</p>}
+            {!classes.some(row => row.weekday === weekday&&row.term===visibleTerm) && <p className="muted">등록된 수업이 없습니다. 아래에서 추가해주세요.</p>}
           </section>
-          <section className="class-editor"><h2>{editing ? '수업 수정' : '수업 등록'}</h2>
+          <section ref={editorSection} className="class-editor"><h2>{editing ? '수업 수정' : '수업 등록'}</h2>
             <form className="schedule-form" onSubmit={save}>
               <fieldset disabled={busy}>
                 <label>수업명<input value={form.title} onChange={change('title')} maxLength={100} required /></label>
-                <div className="form-pair"><label>학기<input value={form.term} onChange={change('term')} maxLength={60} required /></label><label>요일<select value={form.weekday} onChange={change('weekday')}>{days.map((day,index) => <option key={day} value={index+1}>{day}요일</option>)}</select></label></div>
-                <div className="form-pair"><label>시작 시각<input type="time" value={form.start} onChange={change('start')} required /></label><label>종료 시각<input type="time" value={form.end} onChange={change('end')} required /></label></div>
+                <label>학기<input value={form.term} onChange={change('term')} maxLength={60} required /></label>
+                <section className="meeting-editor" aria-label="1회차 수업"><h3>{second?'1회차':'수업 시간'}</h3>
+                  <label>요일<select value={form.weekday} onChange={change('weekday')}>{days.map((day,index) => <option key={day} value={index+1}>{day}요일</option>)}</select></label>
+                  <div className="form-pair"><TimePicker label="시작 시각" value={form.start} onChange={value=>changeTime('start',value)} /><TimePicker label="종료 시각" value={form.end} onChange={value=>changeTime('end',value)} /></div>
+                </section>
+                {!editing && <button type="button" aria-pressed={Boolean(second)} onClick={()=>setSecond(previous=>previous?null:classEditor.secondMeeting(form))}>{second?'− 2회차 빼기':'+ 주 2회 수업 추가'}</button>}
+                {second && <section className="meeting-editor" aria-label="2회차 수업"><h3>2회차</h3>
+                  <label>2회차 요일<select value={second.weekday} onChange={event=>setSecond(previous=>({...previous,weekday:Number(event.target.value)}))}>{days.map((day,index)=><option key={day} value={index+1}>{day}요일</option>)}</select></label>
+                  <div className="form-pair"><TimePicker label="2회차 시작 시각" value={second.start} onChange={value=>changeTime('start',value,true)} /><TimePicker label="2회차 종료 시각" value={second.end} onChange={value=>changeTime('end',value,true)} /></div>
+                </section>}
+                <p className="auth-help">시작 시각을 바꾸면 종료 시각은 1시간 15분 뒤로 설정되며, 직접 변경할 수 있습니다.{minutes(form.start)>1360||(second&&minutes(second.start)>1360)?' 자정을 넘는 경우 종료 시각을 같은 날 23:55로 설정합니다.':''}{second?' 두 회차는 저장 후 각 요일에서 수정할 수 있습니다.':''}</p>
                 <div className="form-pair"><label>학기 시작일<input type="date" value={form.starts_on} onChange={change('starts_on')} required /></label><label>학기 종료일<input type="date" value={form.ends_on} onChange={change('ends_on')} required /></label></div>
                 <label>강의 장소</label><div className="place-search"><input aria-label="강의 장소 검색" value={placeQuery} maxLength={100} placeholder="예: 경북대학교 IT1호관" onChange={event => {searchGeneration.current++; setSearching(false); setPlaceQuery(event.target.value); setPlace(null); setResults([]);}} onKeyDown={event => {if(event.key === 'Enter') {event.preventDefault(); searchPlace();}}} /><button type="button" disabled={searching} onClick={searchPlace}>{searching ? '검색 중…' : '검색'}</button></div>
                 {results.length > 0 && <ul className="place-results">{results.map((result,index) => <li key={result.id || index}><button type="button" onClick={() => {searchGeneration.current++; setPlace(result); setPlaceQuery(result.name); setResults([]); setStatus('강의 장소를 선택했습니다.');}}>{result.name}<small>{result.address}</small></button></li>)}</ul>}
@@ -168,7 +227,6 @@ export default function CampusShell({supabaseConfig}) {
           </section>
         </>}
       </>}
-      <p role="status" className="schedule-status">{status}</p>
     </dialog>
   </main>;
 }

@@ -8,6 +8,8 @@
 
 신규 DB는 202610100001_private_timetables.sql 다음 202610230001_verified_schedule_members.sql을 적용한다. 기존 DB에는 두 번째만 적용한다. 기존 수업과 옛 허용 목록은 삭제하지 않는다. 두 번째 마이그레이션은 2026-10-23 운영 DB에 적용했다. allow-two-users 예시는 이전 정책용이다.
 
+수업별 즐겨찾기를 위해 20261022155625_class_route_favorites.sql도 적용한다. 기존 RLS를 그대로 사용하는 nullable 열이며 기존 수업은 보존한다. CLI가 생성한 UTC 시각을 파일명에 사용한다. 주간 시간표와 즐겨찾기 동작은 docs/timetable-calendar.md를 참고한다.
+
 ## 인증 설정
 
 - Email 제공자를 통한 비밀번호 가입 허용, Confirm email 비활성화. 사용자가 요청한 아이디 즉시 가입 정책이다.

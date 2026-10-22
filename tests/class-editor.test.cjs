@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const editor=require('../lib/class-editor.cjs'),{validateClassMeetings}=require('../lib/timetable.cjs');
+assert.deepEqual(editor.MINUTES,['00','05','10','15','20','25','30','35','40','45','50','55']);
+assert.equal(editor.defaultEnd('09:00'),'10:15');assert.equal(editor.defaultEnd('10:55'),'12:10');assert.equal(editor.defaultEnd('23:10'),'23:55');
+assert.equal(editor.snapTime(543),'09:05');assert.equal(editor.snapTime(1439),'23:55');
+assert.deepEqual(editor.secondMeeting({weekday:1,start:'09:00',end:'10:15'}),{weekday:3,start:'09:00',end:'10:15'});
+assert.equal(editor.secondMeeting({weekday:7}).weekday,2);
+const common={title:'알고리즘',term:'2026-2',place_name:'IT1호관',latitude:35.889,longitude:128.61,starts_on:'2026-09-01',ends_on:'2026-12-31',owner_id:'forged'};
+const first={weekday:1,start_minute:540,end_minute:615},second={weekday:3,start_minute:630,end_minute:705};
+const rows=validateClassMeetings({...common,meetings:[first,second]});
+assert.deepEqual(rows.map(row=>[row.weekday,row.start_minute,row.end_minute]),[[1,540,615],[3,630,705]]);
+assert.equal(rows[0].title,rows[1].title);assert.equal('owner_id' in rows[0],false);
+for(const meetings of [[],[first,second,first],[first,{...second,end_minute:600}],[first,{...second,start_minute:631}],[first,{...first,start_minute:600,end_minute:675}]])assert.throws(()=>validateClassMeetings({...common,meetings}));
+assert.equal(validateClassMeetings({...common,meetings:[first,{...first,start_minute:615,end_minute:690}]}).length,2);
+console.log('PASS: 5-minute options, 75-minute default, midnight clamp, two independent meetings and full-batch validation');
