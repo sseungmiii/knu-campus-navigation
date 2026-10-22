@@ -22,6 +22,16 @@ function mealLocationQuery(name) {
   if(['공학관교직원식당','공학관학생식당'].includes(normalized))return '경북대학교 공대12호관';
   return `경북대학교 ${String(name).replace(/\(.*\)/,'').trim()}`;
 }
+function mealMenuItem(raw) {
+  const text=String(raw).trim(),match=text.match(/^(.*?)\s*(?:[￦₩]\s*(\d[\d,]*)|(\d[\d,]*)\s*원)\s*$/);
+  if(!match||!match[1].trim())return {name:text,price:null};
+  const price=Number((match[2]||match[3]).replace(/,/g,''));
+  return {name:match[1].trim(),price:Number.isFinite(price)?price:null};
+}
+function selectedRestaurantMeals(restaurant,type='ALL') {
+  const order={조식:0,중식:1,석식:2};
+  return restaurant.meals.filter(meal=>type==='ALL'||meal.type===type).slice().sort((a,b)=>(order[a.type]??3)-(order[b.type]??3));
+}
 function upcomingTrains(trains,at=Date.now(),serviceDate=metroServiceDate(at)) {
   const midnight=Date.parse(`${serviceDate}T00:00:00+09:00`);
   return trains.flatMap(train=>{
@@ -67,4 +77,4 @@ function transitStepStyle(step) {
   const color=({간선:'#304b8e',지선:'#27845a',급행:'#d9434b',순환:'#198787'})[type]||'#304b8e';
   return {color,mapColor:color,textColor:'#fff',label:'버스'};
 }
-if(typeof module!=='undefined')module.exports={departurePlan,nextTrain,upcomingTrains,metroServiceDate,metroDirectionName,mealLocationQuery,busDeparture,transitMetrics,transitCandidates,transitStepStyle};
+if(typeof module!=='undefined')module.exports={departurePlan,nextTrain,upcomingTrains,metroServiceDate,metroDirectionName,mealLocationQuery,mealMenuItem,selectedRestaurantMeals,busDeparture,transitMetrics,transitCandidates,transitStepStyle};

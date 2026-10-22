@@ -9,6 +9,7 @@ function showPurpose(name, focus = false) {
   });
   if (focus) tab.focus();
   document.querySelector('.route-panel').scrollTop = 0;
+  if(name==='meals'&&typeof loadTodayMeals==='function')loadTodayMeals();
 }
 window.addEventListener('DOMContentLoaded', () => {
   const tabs = [...document.querySelectorAll('[data-view]')];

@@ -222,21 +222,52 @@ async function searchMetro(event) {
   } catch(error) {if(generation!==metroGeneration)return;$('metroStatus').classList.add('error');$('metroStatus').textContent=error.name==='TimeoutError'?'시간표 응답이 늦어지고 있습니다. 다시 조회해주세요.':error.message||'시간표를 조회하지 못했습니다.';}
   finally {if(generation===metroGeneration)$('metroSearch').disabled=false;}
 }
+let mealsData=null,mealsLoadedAt=0,mealsRequest=null,selectedMealType='ALL';
+const mealsToday=()=>new Date(Date.now()+9*3600000).toISOString().slice(0,10);
+function renderMeals() {
+  for(const button of $('mealFilters').querySelectorAll('button'))button.setAttribute('aria-pressed',String(button.dataset.mealType===selectedMealType));
+  $('mealsResults').replaceChildren();if(!mealsData)return;
+  const restaurants=mealsData.restaurants.slice().sort((a,b)=>Number(Boolean(selectedRestaurantMeals(b,selectedMealType).length))-Number(Boolean(selectedRestaurantMeals(a,selectedMealType).length)));
+  const count=restaurants.filter(restaurant=>selectedRestaurantMeals(restaurant,selectedMealType).length).length;
+  $('mealsCount').textContent=`${selectedMealType==='ALL'?'전체 식사':selectedMealType} · 식단 등록 ${count}곳 / ${restaurants.length}곳`;
+  if(!restaurants.length){$('mealsResults').append(textNode('p','오늘 등록된 식당 정보가 없습니다.','meal-empty'));return;}
+  for(const restaurant of restaurants){
+    const card=textNode('article','','meal-restaurant'),header=textNode('div','','meal-restaurant-heading');header.append(textNode('h3',restaurant.name));card.append(header);
+    const meals=selectedRestaurantMeals(restaurant,selectedMealType);
+    if(!meals.length)card.append(textNode('p',`${selectedMealType==='ALL'?'오늘':selectedMealType} 식단이 등록되지 않았습니다. 휴무 여부는 식당에 확인해주세요.`,'meal-empty'));
+    for(const meal of meals){
+      const block=textNode('section','','meal-block'),heading=textNode('div','','meal-block-heading'),badge=textNode('h4',meal.type,'meal-type-badge');badge.dataset.mealType=meal.type;
+      heading.append(badge,textNode('span',meal.time?`운영 ${meal.time}`:'운영시간 미제공','meal-hours'));block.append(heading);
+      const list=document.createElement('ul');list.className='meal-menu-list';
+      for(const raw of meal.items){const item=mealMenuItem(raw),row=textNode('li','','meal-menu-item');row.append(textNode('span',item.name,'meal-menu-name'),textNode('span',item.price===null?'가격 미제공':`${item.price.toLocaleString('ko-KR')}원`,item.price===null?'meal-price-missing':'meal-menu-price'));list.append(row);}
+      block.append(list);card.append(block);
+    }
+    const locationQuery=mealLocationQuery(restaurant.name),footer=textNode('div','','meal-restaurant-footer');footer.append(textNode('p',locationQuery,'meal-building'));
+    const button=textNode('button','지도에서 보기 · 길찾기','secondary');button.type='button';button.onclick=()=>{const place=typeof campusMealPlace === 'function' ? campusMealPlace(restaurant.name) : null;if(place){document.body.classList.remove('panel-open');openCampusPlace(place);}else{showPurpose('route',true);$('endQuery').value=locationQuery;search('end');}};footer.append(button);card.append(footer);$('mealsResults').append(card);
+  }
+}
+function loadTodayMeals(force=false) {
+  if(mealsRequest)return mealsRequest;
+  if(!force&&mealsData?.date===mealsToday()&&Date.now()-mealsLoadedAt<300000)return Promise.resolve();
+  if(mealsData&&mealsData.date!==mealsToday()){mealsData=null;$('mealsResults').replaceChildren();$('mealsCount').textContent='';$('mealsDate').textContent='오늘의 식단을 확인하세요.';}
+  $('loadMeals').disabled=true;$('mealsStatus').textContent='오늘 메뉴 조회 중…';$('mealsStatus').classList.remove('error');
+  mealsRequest=(async()=>{
+    try{
+      const response=await fetch(`${apiBase}/api/meals`,{signal:AbortSignal.timeout(15000)}),data=await response.json();if(!response.ok)throw new Error(data.error);
+      if(data.date!==mealsToday())throw new Error('식단 날짜가 바뀌었습니다. 새로고침해주세요.');
+      mealsData=data;mealsLoadedAt=Date.now();
+      $('mealsDate').textContent=new Date(`${data.date}T12:00:00+09:00`).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',month:'long',day:'numeric',weekday:'long'});
+      $('mealsStatus').textContent=`식단 갱신 ${data.updatedAt||'확인 불가'}${data.status&&data.status!=='success'?' · 최근 수집 실패: 등록된 식단을 표시합니다.':''}`;
+      renderMeals();
+    }catch(error){$('mealsStatus').classList.add('error');$('mealsStatus').textContent=error.name==='TimeoutError'?'식단 응답이 늦습니다. 새로고침해주세요.':error.message||'학식 정보를 불러오지 못했습니다.';}
+    finally{$('loadMeals').disabled=false;mealsRequest=null;}
+  })();return mealsRequest;
+}
 window.addEventListener('DOMContentLoaded',()=>{
   $('transitSort').onchange=renderTransitOptions;
   for(const button of $('transitFilters').querySelectorAll('button'))button.onclick=()=>{transitType=button.dataset.transitType;renderTransitOptions();};
-  $('loadMeals').onclick=async()=>{
-    $('loadMeals').disabled=true;$('mealsStatus').textContent='오늘 메뉴 조회 중…';$('mealsResults').replaceChildren();
-    try{const response=await fetch(`${apiBase}/api/meals`,{signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error);
-      $('mealsStatus').textContent=`${data.date} 메뉴 · 갱신 ${data.updatedAt||'확인 불가'}${data.status!=='success'?' · 최근 크롤링 실패: 아래 정보의 날짜를 확인하세요.':''}`;
-      for(const restaurant of data.restaurants){const card=textNode('div','','facility-card');card.append(textNode('strong',restaurant.name));
-        if(!restaurant.meals.length)card.appendChild(textNode('p','식단정보가 없습니다.'));
-        for(const meal of restaurant.meals)card.appendChild(textNode('p',`${meal.type}${meal.time?' · '+meal.time:''}: ${meal.items.join(', ')}`));
-        const locationQuery=mealLocationQuery(restaurant.name);card.append(textNode('p',locationQuery,'meal-building'));
-        const button=textNode('button','지도에서 보기 · 길찾기','secondary');button.type='button';button.onclick=()=>{const place=typeof campusMealPlace === 'function' ? campusMealPlace(restaurant.name) : null;if(place){document.body.classList.remove('panel-open');openCampusPlace(place);}else{showPurpose('route',true);$('endQuery').value=locationQuery;search('end');}};card.appendChild(button);$('mealsResults').appendChild(card);
-      }
-    }catch(error){$('mealsStatus').textContent=error.message||'학식 정보를 불러오지 못했습니다.';}finally{$('loadMeals').disabled=false;}
-  };
+  $('loadMeals').onclick=()=>loadTodayMeals(true);
+  for(const button of $('mealFilters').querySelectorAll('button'))button.onclick=()=>{selectedMealType=button.dataset.mealType;renderMeals();};
   $('transportMode').onchange=()=>{clearRoute();$('findRoute').textContent='경로 찾기';$('routeMode').disabled=$('transportMode').value==='transit';$('walkOptions').hidden=$('transportMode').value==='transit';message('새 이동 수단으로 경로를 검색하세요.');};
   ['classStart','safetyMinutes','indoorMinutes'].forEach(id=>$(id).onchange=updateDeadline);
   $('refreshBus').onclick=refreshBus;$('searchNearby').onclick=searchNearby;$('metroForm').onsubmit=searchMetro;

@@ -61,7 +61,7 @@ $('metroStation').value='반월당';$('metroLine').value='auto';
   await context.findMetroNearby();assert.match($('metroNearbyStatus').textContent,/위치 권한이 거부/);assert.equal($('findMetroNearby').disabled,false);
   context.fetch=async()=>({ok:true,json:async()=>({date:'2026-10-20',status:'success',restaurants:[{name:'GP감꽃식당',meals:[]}]})});
   await $('loadMeals').onclick();
-  $('mealsResults').children[0].children.find(child=>child.type==='button').onclick();
+  $('mealsResults').children[0].children.at(-1).children.find(child=>child.type==='button').onclick();
   assert.equal($('endQuery').value,'경북대학교 글로벌플라자');
   console.log('PASS: both destination headings, seconds tick, service-day display, nearby station selection/denial, meal building handoff and stale search invalidation');
 })().catch(error=>{console.error(error);process.exit(1);});
