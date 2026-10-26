@@ -134,7 +134,7 @@ export default function CampusShell({supabaseConfig}) {
   function edit(row) {
     searchGeneration.current++; setResults([]); setSearching(false); setDeleteId(null);
     setEditing(row?.id || null); setSecond(null); setForm(row ? {...row, start: classEditor.snapTime(row.start_minute), end: classEditor.snapTime(row.end_minute)} : emptyForm());
-    setPlace(row ? {name: row.place_name, coords: [row.latitude,row.longitude]} : null); setPlaceQuery(row?.place_name || '');
+    setPlace(row ? {name: row.place_name, coords: [row.latitude,row.longitude]} : null); setPlaceQuery(row?.place_name || '');if(row)editorSection.current?.scrollIntoView({block:'start',behavior:'smooth'});
   }
   async function searchPlace() {
     const generation = ++searchGeneration.current;
@@ -157,7 +157,7 @@ export default function CampusShell({supabaseConfig}) {
       const saved=data.classes || (data.class ? [data.class] : []);
       setClasses(previous => method === 'DELETE' ? previous.filter(row => !(input.ids||[input.id]).includes(row.id)) : [...previous.filter(row => !saved.some(item=>item.id===row.id)), ...saved]);
       if(method==='DELETE')setTrip(previous=>previous&&(input.ids||[input.id]).includes(previous.row.id)?null:previous);
-      if(method==='PATCH')setTrip(previous=>previous?{...previous,row:saved.find(row=>row.id===previous.row.id)||previous.row}:previous);
+      if(method==='PATCH')setTrip(previous=>previous&&saved.some(row=>row.id===previous.row.id)?null:previous);
       if(method==='PUT'){setStatus('즐겨찾기를 변경했습니다.');setTrip(previous=>previous&&({...previous,row:saved[0],status:input.favorite_route?'즐겨찾기에 저장했습니다. 다음에는 수업을 누르면 이 출발지와 이동 수단을 사용합니다.':'즐겨찾기 경로를 해제했습니다.'}));return;}
       if(saved.length){setWeekday(saved[0].weekday);setCalendarTerm(saved[0].term);}
       edit(null); setStatus(method === 'DELETE' ? '수업을 삭제했습니다.' : `${saved.length>2?saved.length+'개 수업을':saved.length===2?'주 2회 수업을':'수업을'} 저장했습니다.`);dialog.current?.scrollTo({top:0});return data;
@@ -201,7 +201,7 @@ export default function CampusShell({supabaseConfig}) {
     <dialog ref={dialog} className="timetable-dialog schedule-page" onCancel={() => selectShellTab('map')} onClose={() => {setOpen(false);setShellTab(previous=>previous==='schedule'?'map':previous);}}>
       <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => selectShellTab('map')}>지도로</button></header>
     {trip&&<section className="class-trip" aria-label="선택한 수업 이동 안내"><div className="trip-content"><span className="eyebrow">MAKE IT BEFORE CLASS</span><strong>{trip.row.title}{trip.row.room?' · '+trip.row.room+'호':''} · {new Date(trip.classStart).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</strong>
-      <ClassJourney key={trip.row.id+':'+(trip.origin?.coords.join(',')||'pending')} row={trip.row} origin={trip.origin} route={trip.route} classStart={trip.classStart} onMode={mode=>frame.current?.contentWindow?.postMessage({type:'knu:class-mode',classId:trip.row.id,mode},location.origin)}/>
+      <ClassJourney key={trip.row.id+':'+(trip.origin?.coords.join(',')||'pending')} row={trip.row} origin={trip.origin} route={trip.route} classStart={trip.classStart} onMode={mode=>{setOpen(false);setShellTab('map');frame.current?.contentWindow?.postMessage({type:'knu:class-mode',classId:trip.row.id,mode},location.origin);}}/>
       {trip.route&&<p className="trip-deadline">{new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}까지 출발 <small>{trip.estimate?'저장된 예상 시간 · ':''}{Math.ceil(trip.route.duration/60)}분 이동 + 내부 {trip.route.indoorMinutes}분 + 여유 {trip.route.safetyMinutes}분</small></p>}
       <p role="status">{trip.status}</p><ClassWeather data={weather} departure={trip.route?classTrip.departureAt(trip.classStart,trip.route):Date.parse(trip.classStart)} classStart={trip.classStart}/>{trip.route&&<small>{trip.route.start.name} → {trip.row.place_name} · 예상 시각이며 교통 상황에 따라 달라집니다. 즐겨찾기는 출발지도 함께 저장합니다.</small>}</div><div className="trip-actions">
       <button disabled={busy||(!trip.route&&!trip.row.favorite_route)} onClick={()=>mutate('PUT',{id:trip.row.id,favorite_route:trip.row.favorite_route?null:trip.route})}>{trip.row.favorite_route?'★ 즐겨찾기 해제':'☆ 이 경로 즐겨찾기'}</button><button aria-label="수업 이동 안내 닫기" onClick={()=>setTrip(null)}>닫기</button>

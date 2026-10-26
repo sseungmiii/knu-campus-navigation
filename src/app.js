@@ -1,3 +1,4 @@
+if(typeof URLSearchParams!=='undefined'&&typeof location.search==='string'&&new URLSearchParams(location.search).get('shell')==='1')document.body.classList.add('shell-embedded');
 let map, pacemaker;
 const places = {start: null, end: null};
 let selectedRoute = null, routeController = null, routeGeneration = 0, positionGeneration = 0;
