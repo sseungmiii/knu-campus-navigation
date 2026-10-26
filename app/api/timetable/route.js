@@ -28,7 +28,7 @@ async function write(request, method) {
   const auth = await authorized(); if (auth.response) return auth.response;
   let input;
   try {
-    const limit=method==='POST'?65536:4096;
+    const limit=['POST','PATCH'].includes(method)?65536:4096;
     if (Number(request.headers.get('content-length')) > limit) return json({error: '요청이 너무 큽니다.'}, 413);
     const reader = request.body?.getReader(); if (!reader) return json({error: '요청 내용을 입력해주세요.'}, 400);
     const chunks = []; let bytes = 0;
@@ -36,6 +36,17 @@ async function write(request, method) {
     input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch { return json({error: '요청 내용을 확인해주세요.'}, 400); }
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if((method==='PATCH'&&Object.hasOwn(input||{},'classes'))||(method==='DELETE'&&Object.hasOwn(input||{},'ids'))){
+    const ids=method==='PATCH'&&Array.isArray(input.classes)?input.classes.map(row=>row?.id):input.ids;
+    if(!Array.isArray(ids)||!ids.length||ids.length>20||new Set(ids).size!==ids.length||!ids.every(id=>uuid.test(id||'')))return json({error:'관리할 수업을 확인해주세요.'},400);
+    let rows;if(method==='PATCH')try{rows=input.classes.map(row=>({...timetable.validateClass(row),id:row.id}));}catch(error){return json({error:error.message},400);}
+    const owned=await auth.supabase.from('timetable_classes').select('id,favorite_route').eq('owner_id',auth.user.id).in('id',ids);
+    if(owned.error)return json({error:'수업 정보를 확인하지 못했습니다.'},503);
+    if(owned.data.length!==ids.length)return json({error:'관리할 수업을 찾지 못했습니다.'},404);
+    if(method==='DELETE'){const result=await auth.supabase.from('timetable_classes').delete().eq('owner_id',auth.user.id).in('id',ids).select('id');return result.error?json({error:'과목을 삭제하지 못했습니다.'},503):json({ok:true,ids:result.data.map(row=>row.id)});}
+    const result=await auth.supabase.from('timetable_classes').upsert(rows.map(row=>({...row,owner_id:auth.user.id,favorite_route:owned.data.find(old=>old.id===row.id).favorite_route})),{onConflict:'id'}).select(fields);
+    return result.error?json({error:'과목을 수정하지 못했습니다.'},503):json({classes:result.data});
+  }
   if (method !== 'POST' && !uuid.test(input?.id || '')) return json({error: '수업을 선택해주세요.'}, 400);
   if (method === 'DELETE') {
     const result = await auth.supabase.from('timetable_classes').delete().eq('id', input.id).eq('owner_id', auth.user.id).select('id');

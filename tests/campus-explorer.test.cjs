@@ -13,6 +13,7 @@ vm.createContext(context);vm.runInContext(fs.readFileSync('src/map-service.js','
 (async()=>{
   const places=await vm.runInContext("createKakaoMap().campusPlaces('CE7')",context);
   assert.deepEqual(Array.from(places,p=>p.id),['inside','parcel'],'exclude similar street numbers and deduplicate overlapping search tiles');
+  const outside=await vm.runInContext("createKakaoMap().schoolSurroundings('CE7')",context);assert.deepEqual(Array.from(outside,p=>p.id),['outside'],'surroundings exclude verified campus addresses');
   vm.runInContext(fs.readFileSync('src/mobility-utils.js','utf8'),context);
   vm.runInContext(fs.readFileSync('src/campus-explorer.js','utf8'),context);
   for(const name of ['정보센터식당','복지관 교직원식당','카페테리아 첨성','GP감꽃식당','공학관교직원식당(외부업체)','공학관학생식당(외부업체)']){

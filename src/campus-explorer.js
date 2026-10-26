@@ -7,7 +7,31 @@ const campusDining = [
   {id:'meal-engineering',name:'공학관 학생·교직원식당',building:'경북대학교 공대12호관',coords:[35.8884795795739,128.609945976963]}
 ].map(p=>({...p,category:'meal',address:'대구 북구 대학로 80'}));
 let campusFacilities=[...campusDining],campusPins=[],campusFilter='all',campusSearchGeneration=0,campusSelectedPin=null;
-const campusCategoryNames={meal:'학식당',CE7:'카페',CS2:'편의점'},campusIcons={meal:'♧',CE7:'☕',CS2:'▣'};
+const campusCategoryNames={meal:'학식당',FD6:'식당',CE7:'카페',CS2:'편의점'},campusIcons={meal:'♧',FD6:'♧',CE7:'☕',CS2:'▣'};
+let facilityScope='inside',facilityCategory='all',outsideFacilities=[],facilityLoadGeneration=0;
+function renderSchoolFacilities(){
+  const rows=(facilityScope==='inside'?campusFacilities:outsideFacilities).filter(row=>facilityCategory==='all'||row.category===facilityCategory),box=$('schoolFacilityResults');box.replaceChildren();
+  document.querySelectorAll('[data-school-category]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.schoolCategory===facilityCategory)));
+  for(const row of rows){const button=textNode('button','','school-facility-row');button.type='button';button.append(textNode('strong',row.name),textNode('small',(campusCategoryNames[row.category]||'시설')+' · '+row.address));button.onclick=()=>{document.body.classList.remove('panel-open');openCampusPlace(row);};box.append(button);}
+  $('schoolFacilityStatus').textContent=rows.length?`${rows.length}곳 · 카카오 장소 정보 기준`:'표시할 시설이 없습니다. 다른 종류를 선택해보세요.';
+}
+async function showShellTab(tab){
+  $('campusPlaceCard').hidden=true;$('campusSearchResults').hidden=true;campusSelectedPin?.remove();
+  if(tab==='map'){document.body.classList.remove('panel-open');return;}
+  if(tab==='route-nearby'){showPurpose('nearby');return;}
+  if(!['inside','outside'].includes(tab))return;
+  facilityScope=tab;facilityCategory='all';const generation=++facilityLoadGeneration;
+  $('schoolFacilityTitle').textContent=tab==='inside'?'학교 내부 시설':'학교 주변 식당·카페';
+  $('schoolFacilityDescription').textContent=tab==='inside'?'학식당·카페·편의점을 한곳에서 확인하세요. 건물은 상단 장소 검색으로 찾을 수 있어요.':'경북대 대구캠퍼스 중심 2km 안의 식당·카페·편의점을 함께 조회합니다. 영업 여부는 방문 전 확인해주세요.';
+  showPurpose('facilities');renderSchoolFacilities();
+  if(tab==='outside'&&!outsideFacilities.length){
+    $('schoolFacilityStatus').textContent='학교 주변 식당·카페·편의점을 찾고 있어요…';
+    if(!map.schoolSurroundings){$('schoolFacilityStatus').textContent='카카오지도 연결 후 주변 시설을 조회할 수 있습니다.';return;}
+    const results=await Promise.allSettled(['FD6','CE7','CS2'].map(category=>map.schoolSurroundings(category)));if(generation!==facilityLoadGeneration)return;
+    outsideFacilities=[...new Map(results.flatMap(result=>result.status==='fulfilled'?result.value:[]).map(row=>[row.id,row])).values()];renderSchoolFacilities();
+    if(results.some(result=>result.status==='rejected'))$('schoolFacilityStatus').textContent+=' · 일부 조회 실패, 다시 조회해주세요.';
+  }
+}
 function campusDestination(place,kind='end') {
   showPurpose('route');selectPlace(kind,{...place,name:place.building||place.name});
   $('campusPlaceCard').hidden=true;map.panTo(place.coords);
@@ -36,10 +60,14 @@ async function loadCampusFacilities() {
   if(!map.campusPlaces){$('campusPlacesStatus').textContent='학식당 위치 표시 · 카카오 연결 후 카페·편의점을 조회할 수 있습니다.';return;}
   const results=await Promise.allSettled(['CE7','CS2'].map(category=>map.campusPlaces(category)));
   campusFacilities=[...campusDining,...results.flatMap(r=>r.status==='fulfilled'?r.value:[])];renderCampusPins();
+  if($('schoolFacilityResults'))renderSchoolFacilities();
   $('campusPlacesStatus').replaceChildren(textNode('span',`학식당 ${campusDining.length}곳 · 카페 ${campusFacilities.filter(p=>p.category==='CE7').length}곳 · 편의점 ${campusFacilities.filter(p=>p.category==='CS2').length}곳`));
   if(results.some(r=>r.status==='rejected')){const retry=textNode('button','일부 시설 조회 실패 · 다시 시도');retry.onclick=loadCampusFacilities;$('campusPlacesStatus').append(retry);}
 }
 function initCampusExplorer() {
+  if(new URLSearchParams(location.search).get('shell')==='1')document.body.classList.add('shell-embedded');
+  document.querySelectorAll('[data-school-category]').forEach(button=>button.onclick=()=>{facilityCategory=button.dataset.schoolCategory;renderSchoolFacilities();});
+  $('refreshSchoolFacilities').onclick=()=>{outsideFacilities=[];showShellTab(facilityScope);};
   const home=()=>map.campusHome ? map.campusHome() : map.fitPath([[35.885,128.607],[35.893,128.617]]);
   $('campusHome').onclick=()=>{document.body.classList.remove('panel-open');$('campusPlaceCard').hidden=true;campusSelectedPin?.remove();home();};
   $('closePanel').onclick=()=>document.body.classList.remove('panel-open');

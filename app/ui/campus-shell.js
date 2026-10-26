@@ -8,6 +8,8 @@ import classTrip from '../../lib/class-trip.cjs';
 import WeekCalendar from './week-calendar';
 import CampusWeather,{ClassWeather} from './campus-weather';
 import TimetableImport from './timetable-import';
+import courseGroups from '../../lib/course-groups.cjs';
+import CourseManager from './course-manager';
 import ClassJourney from './class-journey';
 const days = ['월', '화', '수', '목', '금', '토', '일'];
 const time = minute => `${String(Math.floor(minute / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
@@ -37,6 +39,9 @@ export default function CampusShell({supabaseConfig}) {
   const [weather,setWeather]=useState(null);
   const [mapPanelOpen,setMapPanelOpen]=useState(false);
   const [importOpen,setImportOpen]=useState(false);
+  const [shellTab,setShellTab]=useState('map');
+  const [manageAll,setManageAll]=useState(true);
+  const selectShellTab=tab=>{setShellTab(tab);setOpen(tab==='schedule');if(tab!=='schedule')frame.current?.contentWindow?.postMessage({type:'knu:shell-tab',tab},location.origin);};
   const [calendarTerm,setCalendarTerm]=useState(''),[trip,setTrip]=useState(null);
   const tripRef=useRef(null);tripRef.current=trip;
   const terms=[...new Set(classes.map(row=>row.term))];
@@ -50,6 +55,7 @@ export default function CampusShell({supabaseConfig}) {
     const timer = setInterval(() => setNow(new Date()), 30000);
     const receive = event => {
       if(event.origin!==location.origin||event.source!==frame.current?.contentWindow)return;
+      if(event.data?.type==='knu:shell-map'){setShellTab('map');setOpen(false);return;}
       if(event.data?.type==='knu:map-ready'){setReady(true);return;}
       if(event.data?.type==='knu:map-panel'&&typeof event.data.open==='boolean'){setMapPanelOpen(event.data.open);return;}
       const active=tripRef.current;if(!active||event.data?.classId!==active.row.id)return;
@@ -71,7 +77,7 @@ export default function CampusShell({supabaseConfig}) {
     return () => {clearInterval(timer); window.removeEventListener('message', receive);};
   }, []);
   useEffect(() => {
-    if (open) dialog.current.showModal(); else if (dialog.current.open) dialog.current.close();
+    if (open) dialog.current.show(); else if (dialog.current.open) dialog.current.close();
   }, [open]);
   useEffect(() => {
     if (!supabase) return;
@@ -149,7 +155,9 @@ export default function CampusShell({supabaseConfig}) {
       const data = await response.json(); if (userRef.current?.id !== currentUser) return;
       if (!response.ok) {setStatus(data.error || '변경하지 못했습니다.');if(method==='PUT')setTrip(previous=>previous&&({...previous,status:data.error||'즐겨찾기를 저장하지 못했습니다.'}));return;}
       const saved=data.classes || (data.class ? [data.class] : []);
-      setClasses(previous => method === 'DELETE' ? previous.filter(row => row.id !== input.id) : [...previous.filter(row => !saved.some(item=>item.id===row.id)), ...saved]);
+      setClasses(previous => method === 'DELETE' ? previous.filter(row => !(input.ids||[input.id]).includes(row.id)) : [...previous.filter(row => !saved.some(item=>item.id===row.id)), ...saved]);
+      if(method==='DELETE')setTrip(previous=>previous&&(input.ids||[input.id]).includes(previous.row.id)?null:previous);
+      if(method==='PATCH')setTrip(previous=>previous?{...previous,row:saved.find(row=>row.id===previous.row.id)||previous.row}:previous);
       if(method==='PUT'){setStatus('즐겨찾기를 변경했습니다.');setTrip(previous=>previous&&({...previous,row:saved[0],status:input.favorite_route?'즐겨찾기에 저장했습니다. 다음에는 수업을 누르면 이 출발지와 이동 수단을 사용합니다.':'즐겨찾기 경로를 해제했습니다.'}));return;}
       if(saved.length){setWeekday(saved[0].weekday);setCalendarTerm(saved[0].term);}
       edit(null); setStatus(method === 'DELETE' ? '수업을 삭제했습니다.' : `${saved.length>2?saved.length+'개 수업을':saved.length===2?'주 2회 수업을':'수업을'} 저장했습니다.`);dialog.current?.scrollTo({top:0});return data;
@@ -174,7 +182,7 @@ export default function CampusShell({supabaseConfig}) {
     let favorite=null;try{if(row.favorite_route)favorite=classTrip.validateFavorite(row.favorite_route);}catch{/* Old or invalid preference: request a fresh route. */}
     const active={row,classStart,route:favorite,estimate:Boolean(favorite),loading:true,status:favorite?'저장된 출발지에서 즐겨찾기 경로를 다시 조회합니다.':'현재 위치를 확인해 출발 시각을 계산합니다. 위치 사용이 어려우면 지도에서 출발지를 검색해주세요.'};setTrip(active);tripRef.current=active;
     frame.current.contentWindow.postMessage({type:'knu:destination',classId:row.id,place:{name:row.place_name,coords:[row.latitude,row.longitude]},course:row.title,classStart,favorite,useCurrentLocation:!favorite},location.origin);
-    setOpen(false);
+    setOpen(false);setShellTab('map');
   }
   const change = key => event => setForm(previous => ({...previous, [key]: event.target.value}));
   const changeTime = (key,value,extra=false) => {
@@ -185,18 +193,19 @@ export default function CampusShell({supabaseConfig}) {
     <header className="account-bar">
       <div className="next-class"><strong>{next ? `다음 수업 · ${next.title}` : '수업까지, 한 걸음 여유롭게.'}</strong><span>{next ? `${time(next.start_minute)} · ${next.place_name}${next.room?' '+next.room+'호':''}` : '사진으로 시간표를 가져오고, 내 수업까지 바로 출발하세요.'}</span></div>
       {next && <button disabled={!ready} onClick={() => navigate(next)}>수업으로 길찾기</button>}
-      <button className="accent" onClick={() => setOpen(true)}>{user ? '내 시간표' : '로그인 · 회원가입'}</button>
+      <button className="accent" onClick={() => selectShellTab('schedule')}>{user ? '내 시간표' : '로그인 · 회원가입'}</button>
     </header>
+    {!open&&shellTab==='map'&&trip&&<section className="map-class-summary" aria-label="수업 이동 핵심 정보"><button type="button" onClick={()=>selectShellTab('schedule')}><strong>{trip.row.title}</strong><span>{trip.route?new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})+'까지 출발 · '+Math.ceil(trip.route.duration/60)+'분 이동':time(trip.row.start_minute)+' 수업 · 출발지를 선택해주세요'}</span></button><button type="button" aria-label="수업 안내 접기" onClick={()=>setTrip(null)}>×</button></section>}
+    <iframe ref={frame} className="campus-map" src="/map/index.html?shell=1" style={{visibility:open?'hidden':'visible'}} aria-hidden={open} inert={open} title="카카오 캠퍼스 도보 길찾기" onLoad={() => {setReady(false); frame.current?.contentWindow?.postMessage({type:'knu:ping'}, location.origin);}} />
+    <CampusWeather onData={setWeather} hidden={open||mapPanelOpen||Boolean(trip)}/>
+    <dialog ref={dialog} className="timetable-dialog schedule-page" onCancel={() => selectShellTab('map')} onClose={() => {setOpen(false);setShellTab(previous=>previous==='schedule'?'map':previous);}}>
+      <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => selectShellTab('map')}>지도로</button></header>
     {trip&&<section className="class-trip" aria-label="선택한 수업 이동 안내"><div className="trip-content"><span className="eyebrow">MAKE IT BEFORE CLASS</span><strong>{trip.row.title}{trip.row.room?' · '+trip.row.room+'호':''} · {new Date(trip.classStart).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</strong>
       <ClassJourney key={trip.row.id+':'+(trip.origin?.coords.join(',')||'pending')} row={trip.row} origin={trip.origin} route={trip.route} classStart={trip.classStart} onMode={mode=>frame.current?.contentWindow?.postMessage({type:'knu:class-mode',classId:trip.row.id,mode},location.origin)}/>
       {trip.route&&<p className="trip-deadline">{new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}까지 출발 <small>{trip.estimate?'저장된 예상 시간 · ':''}{Math.ceil(trip.route.duration/60)}분 이동 + 내부 {trip.route.indoorMinutes}분 + 여유 {trip.route.safetyMinutes}분</small></p>}
       <p role="status">{trip.status}</p><ClassWeather data={weather} departure={trip.route?classTrip.departureAt(trip.classStart,trip.route):Date.parse(trip.classStart)} classStart={trip.classStart}/>{trip.route&&<small>{trip.route.start.name} → {trip.row.place_name} · 예상 시각이며 교통 상황에 따라 달라집니다. 즐겨찾기는 출발지도 함께 저장합니다.</small>}</div><div className="trip-actions">
       <button disabled={busy||(!trip.route&&!trip.row.favorite_route)} onClick={()=>mutate('PUT',{id:trip.row.id,favorite_route:trip.row.favorite_route?null:trip.route})}>{trip.row.favorite_route?'★ 즐겨찾기 해제':'☆ 이 경로 즐겨찾기'}</button><button aria-label="수업 이동 안내 닫기" onClick={()=>setTrip(null)}>닫기</button>
     </div></section>}
-    <iframe ref={frame} className="campus-map" src="/map/index.html" title="카카오 캠퍼스 도보 길찾기" onLoad={() => {setReady(false); frame.current?.contentWindow?.postMessage({type:'knu:ping'}, location.origin);}} />
-    <CampusWeather onData={setWeather} hidden={mapPanelOpen||Boolean(trip)}/>
-    <dialog ref={dialog} className="timetable-dialog" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}>
-      <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => setOpen(false)}>닫기</button></header>
       <p role="status" className="schedule-status">{status}</p>
       {!supabase ? <p>시간표 서버 연결을 준비 중입니다. 지도 길찾기는 이용할 수 있습니다.</p> : authLoading ? <p>로그인 확인 중…</p> : !user ? <>
         <div className="auth-tabs" role="group" aria-label="계정 이용"><button type="button" disabled={busy} aria-pressed={authMode==='login'} onClick={()=>{setAuthMode('login');setStatus('');}}>로그인</button><button type="button" disabled={busy} aria-pressed={authMode==='signup'} onClick={()=>{setAuthMode('signup');setStatus('');}}>회원가입</button></div>
@@ -209,14 +218,11 @@ export default function CampusShell({supabaseConfig}) {
           <div className="calendar-title"><div><span className="eyebrow">YOUR WEEK, IN COLOR</span><h2>이번 주, 내 캠퍼스 리듬</h2></div><div className="calendar-entry-actions"><button className="photo-import-button" type="button" onClick={()=>{setImportOpen(value=>!value);dialog.current?.scrollTo({top:0});}}>✧ 사진으로 가져오기</button><button type="button" onClick={()=>{setImportOpen(false);edit(null);editorSection.current?.scrollIntoView({block:'start'});}}>+ 수업 추가</button></div></div>
           {importOpen&&<TimetableImport defaults={emptyForm()} existing={classes} onCancel={()=>setImportOpen(false)} onSave={async payload=>{const result=await mutate('POST',payload);if(result?.classes){setImportOpen(false);return true;}return false;}}/>}
           {terms.length>1&&<label className="calendar-term">시간표 학기<select value={visibleTerm} onChange={event=>setCalendarTerm(event.target.value)}>{terms.map(term=><option key={term}>{term}</option>)}</select></label>}
-          <WeekCalendar classes={classes.filter(row=>row.term===visibleTerm)} disabled={!ready||busy} selectedId={trip?.row.id} onSelect={navigate} onDay={setWeekday}/>
-          <nav className="day-tabs" aria-label="시간표 요일">{days.map((day,index) => <button key={day} aria-pressed={weekday === index + 1} onClick={() => setWeekday(index + 1)}>{day}</button>)}</nav>
+          <WeekCalendar classes={classes.filter(row=>row.term===visibleTerm)} disabled={!ready||busy} selectedId={trip?.row.id} onSelect={row=>{setWeekday(row.weekday);navigate(row);}} onDay={setWeekday}/>
+          <nav className="day-tabs" aria-label="시간표 요일"><button aria-pressed={manageAll} onClick={()=>setManageAll(true)}>전체</button>{days.map((day,index) => <button key={day} aria-pressed={!manageAll&&weekday === index + 1} onClick={() => {setManageAll(false);setWeekday(index + 1);}}>{day}</button>)}</nav>
           <section aria-label={`${days[weekday - 1]}요일 수업`} className="class-list">
-            {classes.filter(row => row.weekday === weekday&&row.term===visibleTerm).sort((a,b) => a.start_minute - b.start_minute).map(row => <article key={row.id} className="class-card">
-              <h2>{row.title}</h2><p>{time(row.start_minute)}–{time(row.end_minute)} · {row.place_name}{row.room?' '+row.room+'호':''}</p><small>{row.professor?row.professor+' · ':''}{row.term} · {row.starts_on}–{row.ends_on}</small>
-              <div className="class-actions"><button disabled={!ready || busy} onClick={() => navigate(row)}>이 수업으로 길찾기</button><button disabled={busy} onClick={() => {edit(row);editorSection.current?.scrollIntoView({block:'start'});}}>수정</button>{deleteId === row.id ? <><button disabled={busy} onClick={() => mutate('DELETE', {id: row.id})}>삭제 확인</button><button onClick={() => setDeleteId(null)}>취소</button></> : <button disabled={busy} onClick={() => setDeleteId(row.id)}>삭제</button>}</div>
-            </article>)}
-            {!classes.some(row => row.weekday === weekday&&row.term===visibleTerm) && <p className="muted">등록된 수업이 없습니다. 아래에서 추가해주세요.</p>}
+            {courseGroups.groupCourses(classes.filter(row=>row.term===visibleTerm)).filter(group=>manageAll||group.meetings.some(row=>row.weekday===weekday)).map(group=><CourseManager key={group.key} group={group} busy={busy} ready={ready} onNavigate={navigate} onEdit={edit} onMutate={mutate}/>)}
+            {!classes.some(row => (manageAll||row.weekday===weekday)&&row.term===visibleTerm) && <p className="muted">등록된 수업이 없습니다. 아래에서 추가해주세요.</p>}
           </section>
           <section ref={editorSection} className="class-editor"><h2>{editing ? '수업 수정' : '수업 등록'}</h2>
             <form className="schedule-form" onSubmit={save}>
@@ -245,5 +251,6 @@ export default function CampusShell({supabaseConfig}) {
         </>}
       </>}
     </dialog>
+    <nav className="app-bottom-nav" aria-label="주요 메뉴">{[['map','⌘','지도'],['schedule','▦','시간표'],['inside','♧','학교 내부'],['outside','☕','학교 주변'],['route-nearby','⌖','경로 주변']].map(([tab,icon,label])=><button type="button" key={tab} disabled={tab!=='schedule'&&tab!=='map'&&!ready} aria-current={(open?'schedule':shellTab)===tab?'page':undefined} onClick={()=>selectShellTab(tab)}><span aria-hidden="true">{icon}</span>{label}</button>)}</nav>
   </main>;
 }

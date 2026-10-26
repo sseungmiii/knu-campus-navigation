@@ -62,6 +62,15 @@ function createKakaoMap() {
       };
       service.categorySearch(category, callback, {rect,size:15});
     }))).then(groups=>[...new Map(groups.flat().map(p=>[p.id,p])).values()]),
+    schoolSurroundings: category => new Promise((resolve,reject)=>{
+      const results=[],service=new kakao.maps.services.Places();
+      service.categorySearch(category,(items,status,pagination)=>{
+        if(status===kakao.maps.services.Status.ZERO_RESULT)return resolve([]);
+        if(status!==kakao.maps.services.Status.OK)return reject(new Error('학교 주변 시설을 불러오지 못했습니다.'));
+        results.push(...items.filter(p=>!/대학로 80(?:\s|$)|산격동 1370(?:-1)?(?:\s|$)/.test(p.road_address_name+' '+p.address_name)).map(p=>({id:p.id,name:p.place_name,coords:[Number(p.y),Number(p.x)],address:p.road_address_name||p.address_name,category})));
+        if(pagination.hasNextPage)pagination.nextPage();else resolve(results);
+      },{location:coord([35.889,128.612]),radius:2000,sort:'distance',size:15});
+    }),
     search: keyword => new Promise((resolve, reject) => {
       new kakao.maps.services.Places().keywordSearch(keyword, (places, status) => {
         if (status === kakao.maps.services.Status.ZERO_RESULT) return resolve([]);

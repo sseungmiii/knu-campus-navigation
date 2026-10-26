@@ -2,6 +2,7 @@ function showPurpose(name, focus = false) {
   const tab = document.getElementById(`tab-${name}`);
   if (!tab) return;
   document.body.classList.add('panel-open');
+  if(name==='route'&&window.parent!==window)window.parent.postMessage({type:'knu:shell-map'},location.origin);
   document.querySelectorAll('[data-view]').forEach(button => {
     const active = button === tab;
     button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;

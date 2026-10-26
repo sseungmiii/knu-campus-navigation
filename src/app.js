@@ -163,6 +163,7 @@ async function init() {
 }
 window.addEventListener('message', async event => {
   if (event.source !== window.parent || event.origin !== location.origin) return;
+  if(event.data?.type==='knu:shell-tab'&&['map','inside','outside','route-nearby'].includes(event.data.tab)&&map){showShellTab(event.data.tab);return;}
   if (event.data?.type === 'knu:ping') {if (map && pacemaker) window.parent.postMessage({type:'knu:map-ready'}, location.origin); return;}
   if(event.data?.type==='knu:class-mode'&&event.data.classId===activeClassId&&['walk','transit'].includes(event.data.mode)&&places.start&&places.end){$('transportMode').value=event.data.mode;$('walkOptions').hidden=event.data.mode==='transit';$('routeMode').disabled=event.data.mode==='transit';findRoute({preventDefault(){}});return;}
   if (event.data?.type !== 'knu:destination' || !map || !pacemaker) return;

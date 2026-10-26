@@ -21,7 +21,7 @@
       <nav class="purpose-nav" aria-label="이용 메뉴" role="tablist">
         <button id="tab-route" role="tab" aria-selected="true" aria-controls="view-route" data-view="route" type="button"><span aria-hidden="true">↗</span>길찾기</button>
         <button id="tab-metro" role="tab" aria-selected="false" aria-controls="view-metro" data-view="metro" tabindex="-1" type="button"><span aria-hidden="true">▣</span>지하철</button>
-        <button id="tab-nearby" role="tab" aria-selected="false" aria-controls="view-nearby" data-view="nearby" tabindex="-1" type="button"><span aria-hidden="true">⌖</span>주변 시설</button>
+        <button id="tab-facilities" role="tab" aria-selected="false" aria-controls="view-facilities" data-view="facilities" tabindex="-1" type="button"><span aria-hidden="true">♧</span>학교 시설</button><button id="tab-nearby" role="tab" aria-selected="false" aria-controls="view-nearby" data-view="nearby" tabindex="-1" type="button"><span aria-hidden="true">⌖</span>주변 시설</button>
         <button id="tab-meals" role="tab" aria-selected="false" aria-controls="view-meals" data-view="meals" tabindex="-1" type="button"><span aria-hidden="true">☷</span>학식</button>
       </nav>
       <div id="view-route" role="tabpanel" aria-labelledby="tab-route" class="purpose-view">
@@ -69,7 +69,7 @@
         <p class="privacy-note">위치는 안내 중에만 사용하며 저장하지 않습니다. 미리보기는 위치를 사용하지 않습니다.</p>
       </section>
       </div>
-      <div id="view-nearby" role="tabpanel" aria-labelledby="tab-nearby" class="purpose-view" hidden>
+      <div id="view-facilities" role="tabpanel" aria-labelledby="tab-facilities" class="purpose-view" hidden><h2 id="schoolFacilityTitle">학교 내부 시설</h2><p id="schoolFacilityDescription" class="subtext"></p><div class="school-category-filters" role="group" aria-label="학교 시설 종류"><button type="button" data-school-category="all" aria-pressed="true">전체</button><button type="button" data-school-category="meal">학식당</button><button type="button" data-school-category="FD6">식당</button><button type="button" data-school-category="CE7">카페</button><button type="button" data-school-category="CS2">편의점</button></div><button id="refreshSchoolFacilities" type="button" class="secondary">다시 조회</button><p id="schoolFacilityStatus" class="message" role="status"></p><div id="schoolFacilityResults"></div></div><div id="view-nearby" role="tabpanel" aria-labelledby="tab-nearby" class="purpose-view" hidden>
       <section class="facilities-panel"><h2>가는 길에 들를 곳</h2><p class="subtext">선택한 도보 경로 주변의 식당, 카페, 편의점을 확인하세요.</p><button type="button" class="text-link" data-go-route>먼저 길찾기 →</button><label for="facilityCategory">시설 종류</label><select id="facilityCategory"><option value="FD6">식당</option><option value="CE7">카페</option><option value="CS2">편의점</option></select><button id="searchNearby" type="button" class="secondary full">경로 주변 검색</button><p id="nearbyMessage" class="message" role="status">경로를 찾은 뒤 시설을 검색하세요.</p><div id="nearbyResults"></div></section>
       </div>
       <div id="view-metro" role="tabpanel" aria-labelledby="tab-metro" class="purpose-view" hidden>
