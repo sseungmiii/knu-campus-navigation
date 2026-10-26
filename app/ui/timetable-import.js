@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import timetable from '../../lib/timetable.cjs';
 const time=minute=>`${String(Math.floor(minute/60)).padStart(2,'0')}:${String(minute%60).padStart(2,'0')}`;
 const minutes=value=>Number(value.slice(0,2))*60+Number(value.slice(3,5));
-const normalized=value=>value.replace(/\s/g,'').toLowerCase();
+const normalized=value=>value.replace(/대구캠퍼스/g,'').replace(/\s/g,'').toLowerCase();
 export default function TimetableImport({defaults,existing,onSave,onCancel}){
   const [rows,setRows]=useState([]),[preview,setPreview]=useState(''),[meta,setMeta]=useState(null),[progress,setProgress]=useState(null),[message,setMessage]=useState(''),[saving,setSaving]=useState(false),[early,setEarly]=useState(15),[term,setTerm]=useState(defaults.term),[starts,setStarts]=useState(defaults.starts_on),[ends,setEnds]=useState(defaults.ends_on);
   const worker=useRef(null),controller=useRef(null),generation=useRef(0),objectUrl=useRef('');

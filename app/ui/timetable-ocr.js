@@ -42,6 +42,7 @@ export async function recognizeTimetable(file,{signal,onProgress=()=>{},onWorker
       if(basement)row.room=basement[1].toUpperCase();else if(!row.room&&/^[AB]?\d{3}(?:-\d{1,2})?$/i.test(last||''))row.room=last.toUpperCase();
     }
     for(const row of rows){const peer=rows.find(other=>other!==row&&other.title.startsWith(row.title)&&other.title.length>row.title.length&&other.title.length-row.title.length<=2&&other.professor===row.professor);if(peer)row.title=peer.title;const same=rows.find(other=>other!==row&&other.title===row.title&&other.room);if(!row.room&&same)row.room=same.room;}
+    for(const row of rows){if(row.room&&/IT대학$/.test(row.building)){const peer=rows.find(other=>other!==row&&other.title===row.title&&other.room===row.room&&/^경북대학교 IT대학\d호관$/.test(other.building));if(peer)row.building=peer.building;}}
     onProgress({progress:92,label:'지도에서 강의 건물을 연결하고 있어요'});
     return {rows,grid,startHour:hour,warnings:[...(grid.cropped?['잘린 오른쪽 요일은 인식에서 제외했습니다.']:[]),'가려진 수업은 등록하지 않습니다. 요일·시간·손글씨 호실을 확인해주세요.']};
   }finally{await worker.terminate().catch(()=>{});onWorker(null);source.width=source.height=1;}
