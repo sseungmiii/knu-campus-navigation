@@ -12,7 +12,7 @@ function message(text, error = false) { $('routeMessage').textContent = text; $(
 function classRouteSignature(route) {return (route.steps||[]).filter(step=>step.type!=='WALKING').map(step=>`${step.type}:${(step.vehicles||[]).join('/')}:${step.boardingStop?.id||step.stops?.[0]||''}`).join('|').slice(0,500);}
 function notifyClassRoute() {
   if(!activeClassId||!selectedRoute||!places.start||!places.end)return;
-  window.parent.postMessage({type:'knu:class-route',classId:activeClassId,end:places.end.coords,route:{start:places.start,mode:$('transportMode').value,routeMode:$('routeMode').value,duration:selectedRoute.duration,signature:classRouteSignature(selectedRoute),indoorMinutes:Number($('indoorMinutes').value),safetyMinutes:Number($('safetyMinutes').value)}},location.origin);
+  window.parent.postMessage({type:'knu:class-route',classId:activeClassId,end:places.end.coords,incomplete:selectedRoute.connectionsComplete===false,route:{start:places.start,mode:$('transportMode').value,routeMode:$('routeMode').value,duration:selectedRoute.duration,signature:classRouteSignature(selectedRoute),indoorMinutes:Number($('indoorMinutes').value),safetyMinutes:Number($('safetyMinutes').value)}},location.origin);
 }
 function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`; }
 function updateReady() { $('findRoute').disabled = !map || !places.start || !places.end; }

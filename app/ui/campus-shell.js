@@ -64,7 +64,7 @@ export default function CampusShell({supabaseConfig}) {
       if(event.data.type==='knu:class-route'){
         const end=event.data.end;
         if(!Array.isArray(end)||end.length!==2||!end.every(Number.isFinite)||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;
-        try{const route=classTrip.validateFavorite(event.data.route);if(route)setTrip(previous=>previous&&({...previous,route,loading:false,estimate:false,status:'경로를 조회했습니다. 이동 안내는 지도에서 확인하세요.'}));}catch{/* Ignore invalid map messages. */}
+        try{const route=classTrip.validateFavorite(event.data.route);if(route)setTrip(previous=>previous&&({...previous,route:{...route,incomplete:event.data.incomplete===true},loading:false,estimate:false,status:'경로를 조회했습니다. 이동 안내는 지도에서 확인하세요.'}));}catch{/* Ignore invalid map messages. */}
       }
     };
     window.addEventListener('message', receive);

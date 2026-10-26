@@ -17,8 +17,8 @@ console.log('PASS: timetable destination handoff, iframe source/origin validatio
   const favorite={start:{name:'즐겨찾기 출발지',coords:[35.88,128.61]},mode:'transit',routeMode:'BROAD_FIRST',signature:'BUS:937:123',duration:1800,indoorMinutes:4,safetyMinutes:6};
   await send({type:'knu:destination',classId:'class-a',place,classStart:'2026-10-26T00:00:00Z',favorite});
   assert.equal(elements.get('startQuery').value,'즐겨찾기 출발지');assert.equal(elements.get('transportMode').value,'transit');assert.equal(elements.get('indoorMinutes').value,4);assert.equal(vm.runInContext('routeQueries',context),1);
-  vm.runInContext("selectedRoute={duration:1800,steps:[{type:'BUS',vehicles:['937'],boardingStop:{id:'123'}}]};notifyClassRoute();",context);
-  const route=posted.findLast(message=>message.type==='knu:class-route');assert.equal(route.classId,'class-a');assert.equal(route.route.signature,'BUS:937:123');assert.deepEqual(Array.from(route.end),place.coords);
+  vm.runInContext("selectedRoute={duration:1800,connectionsComplete:false,steps:[{type:'BUS',vehicles:['937'],boardingStop:{id:'123'}}]};notifyClassRoute();",context);
+  const route=posted.findLast(message=>message.type==='knu:class-route');assert.equal(route.classId,'class-a');assert.equal(route.incomplete,true);assert.equal(route.route.signature,'BUS:937:123');assert.deepEqual(Array.from(route.end),place.coords);
   posted.length=0;vm.runInContext("selectPlace('start',{name:'변경한 출발지',coords:[35.89,128.62]});",context);assert.equal(posted.find(message=>message.type==='knu:class-origin-clear')?.classId,'class-a','Changing origin must invalidate old departure comparisons');
   vm.runInContext("getPosition=async()=>{throw new Error('위치 거부');};",context);
   await send({type:'knu:destination',classId:'class-b',place,useCurrentLocation:true});assert.match(elements.get('routeMessage').textContent,/출발지를 검색/);assert.equal(vm.runInContext('routeQueries',context),1,'Denied GPS must not silently route from an old location');
