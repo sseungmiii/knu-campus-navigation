@@ -7,12 +7,14 @@ import classEditor from '../../lib/class-editor.cjs';
 import classTrip from '../../lib/class-trip.cjs';
 import WeekCalendar from './week-calendar';
 import CampusWeather,{ClassWeather} from './campus-weather';
+import TimetableImport from './timetable-import';
+import ClassJourney from './class-journey';
 const days = ['월', '화', '수', '목', '금', '토', '일'];
 const time = minute => `${String(Math.floor(minute / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
 const minutes = value => Number(value.split(':')[0]) * 60 + Number(value.split(':')[1]);
 function emptyForm() {
   const {date} = timetable.koreaClock(); const year = date.slice(0,4), second = Number(date.slice(5,7)) >= 7;
-  return {title: '', term: `${year}년 ${second ? 2 : 1}학기`, weekday: timetable.koreaClock().weekday, start: '09:00', end: '10:15', starts_on: `${year}-${second ? '08-01' : '03-01'}`, ends_on: `${year}-${second ? '12-31' : '06-30'}`};
+  return {title: '',room:'',professor:'',term: `${year}년 ${second ? 2 : 1}학기`, weekday: timetable.koreaClock().weekday, start: '09:00', end: '10:15', starts_on: `${year}-${second ? '08-01' : '03-01'}`, ends_on: `${year}-${second ? '12-31' : '06-30'}`};
 }
 function TimePicker({label,value,onChange}) {
   const [hour,minute]=value.split(':');
@@ -34,6 +36,7 @@ export default function CampusShell({supabaseConfig}) {
   const [second,setSecond]=useState(null);
   const [weather,setWeather]=useState(null);
   const [mapPanelOpen,setMapPanelOpen]=useState(false);
+  const [importOpen,setImportOpen]=useState(false);
   const [calendarTerm,setCalendarTerm]=useState(''),[trip,setTrip]=useState(null);
   const tripRef=useRef(null);tripRef.current=trip;
   const terms=[...new Set(classes.map(row=>row.term))];
@@ -50,11 +53,16 @@ export default function CampusShell({supabaseConfig}) {
       if(event.data?.type==='knu:map-ready'){setReady(true);return;}
       if(event.data?.type==='knu:map-panel'&&typeof event.data.open==='boolean'){setMapPanelOpen(event.data.open);return;}
       const active=tripRef.current;if(!active||event.data?.classId!==active.row.id)return;
+      if(event.data.type==='knu:class-origin'){
+        const start=event.data.start,end=event.data.end;
+        if(!Array.isArray(start?.coords)||start.coords.length!==2||!start.coords.every(Number.isFinite)||Math.abs(start.coords[0])>90||Math.abs(start.coords[1])>180||typeof start.name!=='string'||!['walk','transit'].includes(event.data.mode)||!Array.isArray(end)||end.length!==2||!end.every(Number.isFinite)||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;
+        setTrip(previous=>previous&&({...previous,route:previous.origin&&previous.origin.coords.join(',')!==start.coords.join(',')?null:previous.route,origin:{name:start.name.slice(0,150),coords:start.coords,mode:event.data.mode}}));
+      }
       if(event.data.type==='knu:route-pending')setTrip(previous=>previous&&({...previous,route:previous.estimate?previous.route:null,loading:true}));
       if(event.data.type==='knu:trip-status'&&typeof event.data.status==='string')setTrip(previous=>previous&&({...previous,status:event.data.status.slice(0,500),loading:!event.data.error&&previous.loading}));
       if(event.data.type==='knu:class-route'){
         const end=event.data.end;
-        if(!Array.isArray(end)||end.length!==2||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;
+        if(!Array.isArray(end)||end.length!==2||!end.every(Number.isFinite)||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;
         try{const route=classTrip.validateFavorite(event.data.route);if(route)setTrip(previous=>previous&&({...previous,route,loading:false,estimate:false,status:'경로를 조회했습니다. 이동 안내는 지도에서 확인하세요.'}));}catch{/* Ignore invalid map messages. */}
       }
     };
@@ -77,7 +85,7 @@ export default function CampusShell({supabaseConfig}) {
     return () => {alive = false; listener.subscription.unsubscribe();};
   }, [supabase]);
   useEffect(() => {
-    setClasses([]); setAllowed(false); setTrip(null); setEditing(null); setForm(emptyForm()); setSecond(null); setPlace(null); setPlaceQuery(''); setResults([]); setDeleteId(null); setSearching(false); searchGeneration.current++;
+    setClasses([]); setAllowed(false); setTrip(null);setImportOpen(false); setEditing(null); setForm(emptyForm()); setSecond(null); setPlace(null); setPlaceQuery(''); setResults([]); setDeleteId(null); setSearching(false); searchGeneration.current++;
     if (!user) return;
     const controller = new AbortController();
     setStatus('시간표를 불러오는 중…');
@@ -143,17 +151,17 @@ export default function CampusShell({supabaseConfig}) {
       setClasses(previous => method === 'DELETE' ? previous.filter(row => row.id !== input.id) : [...previous.filter(row => !saved.some(item=>item.id===row.id)), ...saved]);
       if(method==='PUT'){setStatus('즐겨찾기를 변경했습니다.');setTrip(previous=>previous&&({...previous,row:saved[0],status:input.favorite_route?'즐겨찾기에 저장했습니다. 다음에는 수업을 누르면 이 출발지와 이동 수단을 사용합니다.':'즐겨찾기 경로를 해제했습니다.'}));return;}
       if(saved.length){setWeekday(saved[0].weekday);setCalendarTerm(saved[0].term);}
-      edit(null); setStatus(method === 'DELETE' ? '수업을 삭제했습니다.' : `${saved.length===2?'주 2회 수업을':'수업을'} 저장했습니다.`);dialog.current?.scrollTo({top:0});
+      edit(null); setStatus(method === 'DELETE' ? '수업을 삭제했습니다.' : `${saved.length>2?saved.length+'개 수업을':saved.length===2?'주 2회 수업을':'수업을'} 저장했습니다.`);dialog.current?.scrollTo({top:0});return data;
     } catch {if (userRef.current?.id === currentUser) {setStatus('시간표 서버에 연결하지 못했습니다.');if(method==='PUT')setTrip(previous=>previous&&({...previous,status:'즐겨찾기를 저장하지 못했습니다. 연결을 확인한 뒤 다시 시도해주세요.'}));}}
     finally {setBusy(false);}
   }
   function save(event) {
     event.preventDefault(); if (!place) {setStatus('강의 장소를 검색 결과에서 선택해주세요.');dialog.current?.scrollTo({top:0}); return;}
     try {
-      const input = timetable.validateClass({...form, weekday: Number(form.weekday), start_minute: minutes(form.start), end_minute: minutes(form.end), place_name: place.name, latitude: place.coords[0], longitude: place.coords[1]});
+      const input = timetable.validateClass({...form, weekday: Number(form.weekday), start_minute: minutes(form.start), end_minute: minutes(form.end),display_end_minute:Math.min(1439,minutes(form.end)+15),place_name: place.name, latitude: place.coords[0], longitude: place.coords[1]});
       if(editing) mutate('PATCH',{...input,id:editing});
       else {
-        const meetings=[{weekday:input.weekday,start_minute:input.start_minute,end_minute:input.end_minute},...(second?[{weekday:Number(second.weekday),start_minute:minutes(second.start),end_minute:minutes(second.end)}]:[])];
+        const meetings=[{weekday:input.weekday,start_minute:input.start_minute,end_minute:input.end_minute,display_end_minute:input.display_end_minute},...(second?[{weekday:Number(second.weekday),start_minute:minutes(second.start),end_minute:minutes(second.end),display_end_minute:Math.min(1439,minutes(second.end)+15)}]:[])];
         const payload={...input,meetings};timetable.validateClassMeetings(payload);mutate('POST',payload);
       }
     } catch (error) {setStatus(error.message);dialog.current?.scrollTo({top:0});}
@@ -174,11 +182,12 @@ export default function CampusShell({supabaseConfig}) {
   };
   return <main className="campus-shell">
     <header className="account-bar">
-      <div className="next-class"><strong>{next ? `다음 수업 · ${next.title}` : '내 시간표로 길찾기'}</strong><span>{next ? `${time(next.start_minute)} · ${next.place_name}` : '수업을 등록하면 오늘의 이동을 바로 준비할 수 있어요.'}</span></div>
+      <div className="next-class"><strong>{next ? `다음 수업 · ${next.title}` : '수업까지, 한 걸음 여유롭게.'}</strong><span>{next ? `${time(next.start_minute)} · ${next.place_name}${next.room?' '+next.room+'호':''}` : '사진으로 시간표를 가져오고, 내 수업까지 바로 출발하세요.'}</span></div>
       {next && <button disabled={!ready} onClick={() => navigate(next)}>수업으로 길찾기</button>}
       <button className="accent" onClick={() => setOpen(true)}>{user ? '내 시간표' : '로그인 · 회원가입'}</button>
     </header>
-    {trip&&<section className="class-trip" aria-label="선택한 수업 이동 안내"><div><strong>{trip.row.title} · {new Date(trip.classStart).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</strong>
+    {trip&&<section className="class-trip" aria-label="선택한 수업 이동 안내"><div className="trip-content"><span className="eyebrow">MAKE IT BEFORE CLASS</span><strong>{trip.row.title}{trip.row.room?' · '+trip.row.room+'호':''} · {new Date(trip.classStart).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</strong>
+      <ClassJourney key={trip.row.id+':'+(trip.origin?.coords.join(',')||'pending')} row={trip.row} origin={trip.origin} route={trip.route} classStart={trip.classStart} onMode={mode=>frame.current?.contentWindow?.postMessage({type:'knu:class-mode',classId:trip.row.id,mode},location.origin)}/>
       {trip.route&&<p className="trip-deadline">{new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}까지 출발 <small>{trip.estimate?'저장된 예상 시간 · ':''}{Math.ceil(trip.route.duration/60)}분 이동 + 내부 {trip.route.indoorMinutes}분 + 여유 {trip.route.safetyMinutes}분</small></p>}
       <p role="status">{trip.status}</p><ClassWeather data={weather} departure={trip.route?classTrip.departureAt(trip.classStart,trip.route):Date.parse(trip.classStart)} classStart={trip.classStart}/>{trip.route&&<small>{trip.route.start.name} → {trip.row.place_name} · 예상 시각이며 교통 상황에 따라 달라집니다. 즐겨찾기는 출발지도 함께 저장합니다.</small>}</div><div className="trip-actions">
       <button disabled={busy||(!trip.route&&!trip.row.favorite_route)} onClick={()=>mutate('PUT',{id:trip.row.id,favorite_route:trip.row.favorite_route?null:trip.route})}>{trip.row.favorite_route?'★ 즐겨찾기 해제':'☆ 이 경로 즐겨찾기'}</button><button aria-label="수업 이동 안내 닫기" onClick={()=>setTrip(null)}>닫기</button>
@@ -196,13 +205,14 @@ export default function CampusShell({supabaseConfig}) {
         <div className="account-row"><span>{auth.displayIdentifier(user.email)}</span><button disabled={busy} onClick={logout}>로그아웃</button></div>
         {!allowed && <button disabled={busy} onClick={() => setRefreshIndex(value => value + 1)}>접근 권한 다시 확인</button>}
         {allowed && <>
-          <div className="calendar-title"><h2>주간 시간표</h2><button type="button" onClick={()=>{edit(null);editorSection.current?.scrollIntoView({block:'start'});}}>+ 수업 추가</button></div>
+          <div className="calendar-title"><div><span className="eyebrow">YOUR WEEK, IN COLOR</span><h2>이번 주, 내 캠퍼스 리듬</h2></div><div className="calendar-entry-actions"><button className="photo-import-button" type="button" onClick={()=>{setImportOpen(value=>!value);dialog.current?.scrollTo({top:0});}}>✧ 사진으로 가져오기</button><button type="button" onClick={()=>{setImportOpen(false);edit(null);editorSection.current?.scrollIntoView({block:'start'});}}>+ 수업 추가</button></div></div>
+          {importOpen&&<TimetableImport defaults={emptyForm()} existing={classes} onCancel={()=>setImportOpen(false)} onSave={async payload=>{const result=await mutate('POST',payload);if(result?.classes){setImportOpen(false);return true;}return false;}}/>}
           {terms.length>1&&<label className="calendar-term">시간표 학기<select value={visibleTerm} onChange={event=>setCalendarTerm(event.target.value)}>{terms.map(term=><option key={term}>{term}</option>)}</select></label>}
           <WeekCalendar classes={classes.filter(row=>row.term===visibleTerm)} disabled={!ready||busy} selectedId={trip?.row.id} onSelect={navigate} onDay={setWeekday}/>
           <nav className="day-tabs" aria-label="시간표 요일">{days.map((day,index) => <button key={day} aria-pressed={weekday === index + 1} onClick={() => setWeekday(index + 1)}>{day}</button>)}</nav>
           <section aria-label={`${days[weekday - 1]}요일 수업`} className="class-list">
             {classes.filter(row => row.weekday === weekday&&row.term===visibleTerm).sort((a,b) => a.start_minute - b.start_minute).map(row => <article key={row.id} className="class-card">
-              <h2>{row.title}</h2><p>{time(row.start_minute)}–{time(row.end_minute)} · {row.place_name}</p><small>{row.term} · {row.starts_on}–{row.ends_on}</small>
+              <h2>{row.title}</h2><p>{time(row.start_minute)}–{time(row.end_minute)} · {row.place_name}{row.room?' '+row.room+'호':''}</p><small>{row.professor?row.professor+' · ':''}{row.term} · {row.starts_on}–{row.ends_on}</small>
               <div className="class-actions"><button disabled={!ready || busy} onClick={() => navigate(row)}>이 수업으로 길찾기</button><button disabled={busy} onClick={() => {edit(row);editorSection.current?.scrollIntoView({block:'start'});}}>수정</button>{deleteId === row.id ? <><button disabled={busy} onClick={() => mutate('DELETE', {id: row.id})}>삭제 확인</button><button onClick={() => setDeleteId(null)}>취소</button></> : <button disabled={busy} onClick={() => setDeleteId(row.id)}>삭제</button>}</div>
             </article>)}
             {!classes.some(row => row.weekday === weekday&&row.term===visibleTerm) && <p className="muted">등록된 수업이 없습니다. 아래에서 추가해주세요.</p>}
@@ -226,6 +236,7 @@ export default function CampusShell({supabaseConfig}) {
                 <label>강의 장소</label><div className="place-search"><input aria-label="강의 장소 검색" value={placeQuery} maxLength={100} placeholder="예: 경북대학교 IT1호관" onChange={event => {searchGeneration.current++; setSearching(false); setPlaceQuery(event.target.value); setPlace(null); setResults([]);}} onKeyDown={event => {if(event.key === 'Enter') {event.preventDefault(); searchPlace();}}} /><button type="button" disabled={searching} onClick={searchPlace}>{searching ? '검색 중…' : '검색'}</button></div>
                 {results.length > 0 && <ul className="place-results">{results.map((result,index) => <li key={result.id || index}><button type="button" onClick={() => {searchGeneration.current++; setPlace(result); setPlaceQuery(result.name); setResults([]); setStatus('강의 장소를 선택했습니다.');}}>{result.name}<small>{result.address}</small></button></li>)}</ul>}
                 {place && <p className="selected-place">✓ {place.name}</p>}
+                <div className="form-pair"><label>강의실<input value={form.room||''} maxLength={80} placeholder="예: 317 / B101" onChange={change('room')}/></label><label>교수명(선택)<input value={form.professor||''} maxLength={80} onChange={change('professor')}/></label></div><p className="auth-help">입력한 종료는 실제 수업 종료입니다. 캘린더 블록은 15분 뒤까지 채워 표시합니다.</p>
                 <button className="accent" type="submit">{editing ? '수정 저장' : '수업 저장'}</button>{editing && <button type="button" onClick={() => edit(null)}>수정 취소</button>}
               </fieldset>
             </form>

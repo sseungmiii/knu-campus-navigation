@@ -1,0 +1,13 @@
+# Timetable photo import
+
+Authenticated members can open **내 시간표 → 사진으로 가져오기**, select a PNG/JPEG/WebP (up to 12MB), review detected classes, connect unresolved buildings, and confirm one atomic batch save. The original image is processed locally with Tesseract.js and self-hosted Korean/English language files; it is not uploaded or persisted. Only normalized, confirmed class rows and public building search queries leave the browser. No Everytime credentials or unofficial API are used.
+
+The detector uses visible timetable grid lines, hourly geometry, weekday headers and colored blocks. It ignores a cropped partial right-hand column. Redacted or invisible classes cannot be recovered. Low quality text, handwritten rooms, unusual layouts and ambiguous buildings require review. Never infer a building coordinate from an incomplete department name; the review must resolve it through the existing place search.
+
+Photo imports default to an actual finish 15 minutes before the drawn block ends. The review offers a zero-minute adjustment too. `end_minute` is the real finish; `display_end_minute` is the visual block finish. Manual entry asks for the real finish and displays a 15-minute tail. The weekly layout accounts for the visible tail when arranging overlaps. Rooms and professor names are editable. Apply `20261026155418_timetable_import_details.sql` before deploying the new API.
+
+POST `/api/timetable` with `{classes, confirmed:true}` accepts 1–60 validated rows and inserts them together, under the current authenticated owner and existing RLS. It rejects an invalid row, unconfirmed batch, or duplicate title/term/day/start/semester date combination. Existing single-course and two-meeting entry still work.
+
+Selecting a calendar block hands its real building and next class start to the map. After obtaining a start location (or restoring the class favorite), the panel compares real walking/transit estimates. Departure deadlines include the saved indoor and arrival margin. Selecting either mode refreshes the map route; unavailable upstream routes stay unavailable rather than receiving invented durations. Motion honors `prefers-reduced-motion`.
+
+Build preparation copies OCR worker, WASM, language files and available license notices into ignored `public/ocr/`. Models are fetched only when importing a photo. Run `npm ci`, `npm run check`, `npm test`, `npm run build` with Node 22+. Tests cover generic synthetic grid segmentation, normalization, actual/display end validation, atomic owner-scoped imports, and PostgreSQL RLS. Do not commit personal screenshots or use real members' rows as test fixtures.

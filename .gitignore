@@ -4,6 +4,8 @@ dist/
 supabase/.temp/
 .next/
 public/map/
+public/ocr/
+*.traineddata
 .env
 .env.*
 !.env.example

@@ -3,7 +3,7 @@ import {createClient} from '../../../lib/supabase/server';
 import timetable from '../../../lib/timetable.cjs';
 import requestOrigin from '../../../lib/request-origin.cjs';
 import classTrip from '../../../lib/class-trip.cjs';
-const fields = 'id,title,term,weekday,start_minute,end_minute,place_name,latitude,longitude,starts_on,ends_on,favorite_route';
+const fields = 'id,title,term,weekday,start_minute,end_minute,place_name,latitude,longitude,starts_on,ends_on,favorite_route,room,professor,display_end_minute';
 const json = (data, status = 200) => NextResponse.json(data, {status, headers: {'Cache-Control': 'private, no-store'}});
 async function authorized() {
   const supabase = await createClient();
@@ -28,10 +28,11 @@ async function write(request, method) {
   const auth = await authorized(); if (auth.response) return auth.response;
   let input;
   try {
-    if (Number(request.headers.get('content-length')) > 4096) return json({error: '요청이 너무 큽니다.'}, 413);
+    const limit=method==='POST'?65536:4096;
+    if (Number(request.headers.get('content-length')) > limit) return json({error: '요청이 너무 큽니다.'}, 413);
     const reader = request.body?.getReader(); if (!reader) return json({error: '요청 내용을 입력해주세요.'}, 400);
     const chunks = []; let bytes = 0;
-    while (true) { const {done, value} = await reader.read(); if (done) break; bytes += value.length; if (bytes > 4096) { await reader.cancel(); return json({error: '요청이 너무 큽니다.'}, 413); } chunks.push(value); }
+    while (true) { const {done, value} = await reader.read(); if (done) break; bytes += value.length; if (bytes > limit) { await reader.cancel(); return json({error: '요청이 너무 큽니다.'}, 413); } chunks.push(value); }
     input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch { return json({error: '요청 내용을 확인해주세요.'}, 400); }
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -46,6 +47,14 @@ async function write(request, method) {
     const result=await auth.supabase.from('timetable_classes').update({favorite_route:favorite}).eq('id',input.id).eq('owner_id',auth.user.id).select(fields).maybeSingle();
     if(result.error)return json({error:'즐겨찾기를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'},503);
     return result.data?json({class:result.data}):json({error:'수업을 찾지 못했습니다.'},404);
+  }
+  if(method==='POST'&&Object.hasOwn(input||{},'classes')){
+    let rows;try{rows=timetable.validateImport(input);}catch(error){return json({error:error.message},400);}
+    const existing=await auth.supabase.from('timetable_classes').select('title,term,weekday,start_minute,starts_on,ends_on').eq('owner_id',auth.user.id);
+    if(existing.error)return json({error:'중복 수업을 확인하지 못했습니다. 다시 시도해주세요.'},503);
+    if(rows.some(row=>existing.data.some(old=>['title','term','weekday','start_minute','starts_on','ends_on'].every(key=>row[key]===old[key]))))return json({error:'이미 저장한 수업이 포함되어 있습니다. 중복 수업을 선택 해제해주세요.'},409);
+    const result=await auth.supabase.from('timetable_classes').insert(rows.map(row=>({...row,owner_id:auth.user.id}))).select(fields);
+    return result.error?json({error:'수업을 저장하지 못했습니다. 입력 내용과 장소 연결을 확인해주세요.'},503):json({classes:result.data},201);
   }
   if (method === 'POST' && Object.hasOwn(input || {}, 'meetings')) {
     let rows; try { rows = timetable.validateClassMeetings(input); } catch (error) { return json({error: error.message}, 400); }

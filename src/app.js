@@ -60,6 +60,7 @@ async function search(kind) {
 async function findRoute(event) {
   event.preventDefault();
   if (!places.start || !places.end) { message('출발지와 도착지를 검색 결과에서 선택해주세요.', true); return; }
+  if(activeClassId)window.parent.postMessage({type:'knu:class-origin',classId:activeClassId,start:places.start,end:places.end.coords,mode:$('transportMode').value},location.origin);
   clearRoute();
   if (!hasBackend) { message('현재 길찾기 연결을 준비 중입니다. 잠시 후 다시 시도해주세요.', true); return; }
   const start = {...places.start}, end = {...places.end};
@@ -161,6 +162,7 @@ async function init() {
 window.addEventListener('message', async event => {
   if (event.source !== window.parent || event.origin !== location.origin) return;
   if (event.data?.type === 'knu:ping') {if (map && pacemaker) window.parent.postMessage({type:'knu:map-ready'}, location.origin); return;}
+  if(event.data?.type==='knu:class-mode'&&event.data.classId===activeClassId&&['walk','transit'].includes(event.data.mode)&&places.start&&places.end){$('transportMode').value=event.data.mode;$('walkOptions').hidden=event.data.mode==='transit';$('routeMode').disabled=event.data.mode==='transit';findRoute({preventDefault(){}});return;}
   if (event.data?.type !== 'knu:destination' || !map || !pacemaker) return;
   const place = event.data.place;
   if (typeof place?.name !== 'string' || !place.name.trim() || place.name.length > 150 || !Array.isArray(place.coords) || place.coords.length !== 2 || !place.coords.every(Number.isFinite) || Math.abs(place.coords[0]) > 90 || Math.abs(place.coords[1]) > 180) return;

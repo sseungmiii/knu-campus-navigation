@@ -1,8 +1,9 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const timetable=require('../lib/timetable.cjs'),requestOrigin=require('../lib/request-origin.cjs');
 const source=fs.readFileSync(require.resolve('../app/api/timetable/route.js'),'utf8').replace(/^import .*;$/gm,'').replace(/export /g,'');
-const owner='30000000-0000-4000-8000-000000000001';let calls=[],updates=[],filters=[],fail=false;
+const owner='30000000-0000-4000-8000-000000000001';let calls=[],updates=[],filters=[],fail=false,existingRows=[];
 const supabase={auth:{getUser:async()=>({data:{user:{id:owner,email_confirmed_at:'2026-01-01'}}})},rpc:async()=>({data:true}),from:()=>({
+  select(){return {eq:async(key,value)=>{assert.equal(key,'owner_id');assert.equal(value,owner);return {data:existingRows};}};},
   insert(rows){calls.push(rows);return {select:async()=>fail?{error:{message:'upstream detail'}}:{data:rows.map((row,i)=>({...row,id:String(i)}))}};},
   update(row){updates.push(row);const query={eq(key,value){filters.push([key,value]);return query;},select(){return {maybeSingle:async()=>({data:{id:owner,...row}})};}};return query;}
 })};
@@ -17,5 +18,9 @@ const request=payload=>new Request('https://example.com/api/timetable',{method:'
   const favorite={start:{name:'출발지',coords:[35.88,128.61]},mode:'walk',routeMode:'SHORTEST',duration:900,signature:'',indoorMinutes:3,safetyMinutes:5};
   response=await context.write(request({id:owner,favorite_route:favorite,owner_id:'forged'}),'PUT');assert.equal(response.status,200);assert.equal(updates.length,1);assert.deepEqual(filters,[['id',owner],['owner_id',owner]]);assert.equal(updates[0].owner_id,undefined);
   response=await context.write(request({id:owner,favorite_route:{...favorite,duration:-1}}),'PUT');assert.equal(response.status,400);assert.equal(updates.length,1);
+  fail=false;const imported={...common,...meetings[0],room:'317',professor:'교수',display_end_minute:630};
+  response=await context.write(request({confirmed:true,classes:[imported,{...imported,weekday:3}]}),'POST');assert.equal(response.status,201);assert.equal(response.data.classes.length,2);assert.ok(calls.at(-1).every(row=>row.owner_id===owner));assert.equal(response.data.classes[0].display_end_minute,630);
+  const before=calls.length;existingRows=[imported];response=await context.write(request({confirmed:true,classes:[imported]}),'POST');assert.equal(response.status,409);assert.equal(calls.length,before);
+  response=await context.write(request({confirmed:false,classes:[imported]}),'POST');assert.equal(response.status,400);assert.equal(calls.length,before);
   console.log('PASS: timetable batch uses one owner-scoped insert, validates all meetings before writing and handles failures');
 })().catch(error=>{console.error(error);process.exit(1);});

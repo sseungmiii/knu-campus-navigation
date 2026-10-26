@@ -6,4 +6,5 @@ assert.equal(new Date(departureAt('2026-10-26T09:00:00+09:00',route)).toISOStrin
 assert.equal(departureAt(null,route),null);
 const rows=[{id:'a',weekday:1,start_minute:540,end_minute:615},{id:'b',weekday:1,start_minute:600,end_minute:675},{id:'c',weekday:1,start_minute:675,end_minute:750},{id:'d',weekday:2,start_minute:540,end_minute:615},{id:'weekend',weekday:6,start_minute:540,end_minute:615}];
 const layout=calendarLayout(rows);assert.equal(layout.length,4);assert.equal(layout.find(row=>row.id==='a').lanes,2);assert.equal(layout.find(row=>row.id==='b').lane,1);assert.equal(layout.find(row=>row.id==='c').lanes,1);assert.equal(layout.find(row=>row.id==='d').lane,0);
+const displayed=calendarLayout([{id:'a',weekday:1,start_minute:540,end_minute:615,display_end_minute:630},{id:'b',weekday:1,start_minute:620,end_minute:680}]);assert.equal(displayed[0].lanes,2,'Calendar layout must include the display-only 15 minute tail');
 console.log('PASS: favorite validation, stripped fields, KST departure math, calendar overlap lanes and weekend separation');
