@@ -53,6 +53,7 @@ export default function CampusShell({supabaseConfig}) {
       if(event.data?.type==='knu:map-ready'){setReady(true);return;}
       if(event.data?.type==='knu:map-panel'&&typeof event.data.open==='boolean'){setMapPanelOpen(event.data.open);return;}
       const active=tripRef.current;if(!active||event.data?.classId!==active.row.id)return;
+      if(event.data.type==='knu:class-origin-clear')setTrip(previous=>previous&&({...previous,origin:null,route:null,estimate:false}));
       if(event.data.type==='knu:class-origin'){
         const start=event.data.start,end=event.data.end;
         if(!Array.isArray(start?.coords)||start.coords.length!==2||!start.coords.every(Number.isFinite)||Math.abs(start.coords[0])>90||Math.abs(start.coords[1])>180||typeof start.name!=='string'||!['walk','transit'].includes(event.data.mode)||!Array.isArray(end)||end.length!==2||!end.every(Number.isFinite)||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;

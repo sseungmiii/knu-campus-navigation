@@ -16,6 +16,7 @@ function notifyClassRoute() {
 }
 function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`; }
 function updateReady() { $('findRoute').disabled = !map || !places.start || !places.end; }
+function invalidateClassOrigin(){if(activeClassId)window.parent.postMessage({type:'knu:class-origin-clear',classId:activeClassId},location.origin);}
 function clearRoute() {
   if(activeClassId)window.parent.postMessage({type:'knu:route-pending',classId:activeClassId},location.origin);
   if(typeof mobilityClear==='function')mobilityClear();
@@ -26,6 +27,7 @@ function clearRoute() {
   $('findRoute').textContent = '도보 경로 찾기'; updateReady();
 }
 function selectPlace(kind, place) {
+  invalidateClassOrigin();
   if (kind === 'start') positionGeneration++;
   clearRoute(); places[kind] = place; $(`${kind}Query`).value = place.name;
   $(`${kind}Results`).replaceChildren(); searchGenerations[kind]++;
@@ -131,11 +133,11 @@ async function init() {
   for (const kind of ['start', 'end']) {
     $(`${kind}Search`).onclick = () => search(kind);
     $(`${kind}Query`).onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); search(kind); } };
-    $(`${kind}Query`).oninput = () => { if (kind === 'start') positionGeneration++; places[kind] = null; searchGenerations[kind]++; $(`${kind}Results`).replaceChildren(); clearRoute(); message('장소를 검색하고 결과에서 선택해주세요.'); };
+    $(`${kind}Query`).oninput = () => { invalidateClassOrigin(); if (kind === 'start') positionGeneration++; places[kind] = null; searchGenerations[kind]++; $(`${kind}Results`).replaceChildren(); clearRoute(); message('장소를 검색하고 결과에서 선택해주세요.'); };
   }
   $('routeForm').onsubmit = findRoute;
   $('routeMode').onchange = () => { clearRoute(); message('새 경로 조건으로 다시 검색해주세요.'); };
-  $('swapPlaces').onclick = () => { positionGeneration++; [places.start, places.end] = [places.end, places.start]; [$('startQuery').value, $('endQuery').value] = [$('endQuery').value, $('startQuery').value]; for (const kind of ['start', 'end']) { searchGenerations[kind]++; $(`${kind}Results`).replaceChildren(); } clearRoute(); message('출발지와 도착지를 바꿨습니다.'); };
+  $('swapPlaces').onclick = () => { invalidateClassOrigin(); positionGeneration++; [places.start, places.end] = [places.end, places.start]; [$('startQuery').value, $('endQuery').value] = [$('endQuery').value, $('startQuery').value]; for (const kind of ['start', 'end']) { searchGenerations[kind]++; $(`${kind}Results`).replaceChildren(); } clearRoute(); message('출발지와 도착지를 바꿨습니다.'); };
   $('useLocation').onclick = async () => {
     const generation = ++positionGeneration; $('useLocation').disabled = true; message('현재 위치 확인 중…');
     try { const position = await getPosition(); if (generation !== positionGeneration) return; selectPlace('start', {name: '현재 위치', coords: [position.coords.latitude, position.coords.longitude]}); }
