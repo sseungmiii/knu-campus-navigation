@@ -3,7 +3,7 @@ import {createClient} from '../../../lib/supabase/server';
 import timetable from '../../../lib/timetable.cjs';
 import requestOrigin from '../../../lib/request-origin.cjs';
 import classTrip from '../../../lib/class-trip.cjs';
-const fields = 'id,title,term,weekday,start_minute,end_minute,place_name,latitude,longitude,starts_on,ends_on,favorite_route,room,professor,display_end_minute';
+const fields = 'id,title,term,weekday,start_minute,end_minute,place_name,latitude,longitude,starts_on,ends_on,favorite_route,room,professor,display_end_minute,location_override';
 const json = (data, status = 200) => NextResponse.json(data, {status, headers: {'Cache-Control': 'private, no-store'}});
 async function authorized() {
   const supabase = await createClient();

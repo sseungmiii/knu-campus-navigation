@@ -11,6 +11,7 @@ import TimetableImport from './timetable-import';
 import courseGroups from '../../lib/course-groups.cjs';
 import CourseManager from './course-manager';
 import ClassJourney from './class-journey';
+import PlacePicker from './place-picker';
 const days = ['월', '화', '수', '목', '금', '토', '일'];
 const time = minute => `${String(Math.floor(minute / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
 const minutes = value => Number(value.split(':')[0]) * 60 + Number(value.split(':')[1]);
@@ -43,6 +44,7 @@ export default function CampusShell({supabaseConfig}) {
   const [manageAll,setManageAll]=useState(true);
   const selectShellTab=tab=>{setShellTab(tab);setOpen(tab==='schedule');if(tab!=='schedule')frame.current?.contentWindow?.postMessage({type:'knu:shell-tab',tab},location.origin);};
   const [calendarTerm,setCalendarTerm]=useState(''),[trip,setTrip]=useState(null);
+  const tripSequence=useRef(0),sharedOrigin=useRef(null);
   const tripRef=useRef(null);tripRef.current=trip;
   const terms=[...new Set(classes.map(row=>row.term))];
   const visibleTerm=calendarTerm&&terms.includes(calendarTerm)?calendarTerm:classes.find(row=>now&&row.starts_on<=timetable.koreaClock(now).date&&row.ends_on>=timetable.koreaClock(now).date)?.term||terms[0]||'';
@@ -58,15 +60,17 @@ export default function CampusShell({supabaseConfig}) {
       if(event.data?.type==='knu:shell-map'){setShellTab('map');setOpen(false);return;}
       if(event.data?.type==='knu:map-ready'){setReady(true);return;}
       if(event.data?.type==='knu:map-panel'&&typeof event.data.open==='boolean'){setMapPanelOpen(event.data.open);return;}
-      const active=tripRef.current;if(!active||event.data?.classId!==active.row.id)return;
-      if(event.data.type==='knu:class-origin-clear')setTrip(previous=>previous&&({...previous,origin:null,route:null,estimate:false}));
+      if(event.data?.type==='knu:shared-origin'){const p=event.data.start;if(p&&typeof p.name==='string'&&Array.isArray(p.coords)&&p.coords.length===2&&p.coords.every(Number.isFinite))sharedOrigin.current=p;return;}
+      const active=tripRef.current;if(!active||event.data?.classId!==active.row.id||event.data.requestId!==active.requestId)return;
+      if(event.data.type==='knu:class-option'&&['walk','transit'].includes(event.data.mode)&&Number.isFinite(event.data.duration)&&event.data.duration>0){setTrip(previous=>previous&&({...previous,options:{...previous.options,[event.data.mode]:{duration:event.data.duration,mode:event.data.mode,incomplete:event.data.incomplete===true}}}));return;}
+      if(event.data.type==='knu:class-origin-clear')setTrip(previous=>previous&&({...previous,origin:null,route:null,options:{},estimate:false}));
       if(event.data.type==='knu:class-origin'){
         const start=event.data.start,end=event.data.end;
         if(!Array.isArray(start?.coords)||start.coords.length!==2||!start.coords.every(Number.isFinite)||Math.abs(start.coords[0])>90||Math.abs(start.coords[1])>180||typeof start.name!=='string'||!['walk','transit'].includes(event.data.mode)||!Array.isArray(end)||end.length!==2||!end.every(Number.isFinite)||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;
-        setTrip(previous=>previous&&({...previous,route:previous.origin&&previous.origin.coords.join(',')!==start.coords.join(',')?null:previous.route,origin:{name:start.name.slice(0,150),coords:start.coords,mode:event.data.mode}}));
+        setTrip(previous=>previous&&({...previous,options:previous.origin&&previous.origin.coords.join(',')!==start.coords.join(',')?{}:previous.options,route:previous.origin&&previous.origin.coords.join(',')!==start.coords.join(',')?null:previous.route,origin:{name:start.name.slice(0,150),coords:start.coords,mode:event.data.mode}}));
       }
-      if(event.data.type==='knu:route-pending')setTrip(previous=>previous&&({...previous,route:previous.estimate?previous.route:null,loading:true}));
-      if(event.data.type==='knu:trip-status'&&typeof event.data.status==='string')setTrip(previous=>previous&&({...previous,status:event.data.status.slice(0,500),loading:!event.data.error&&previous.loading}));
+      if(event.data.type==='knu:route-pending')setTrip(previous=>previous&&({...previous,route:null,loading:true}));
+      if(event.data.type==='knu:trip-status'&&typeof event.data.status==='string')setTrip(previous=>previous&&({...previous,status:event.data.status.slice(0,500),loading:event.data.error?false:previous.loading}));
       if(event.data.type==='knu:class-route'){
         const end=event.data.end;
         if(!Array.isArray(end)||end.length!==2||!end.every(Number.isFinite)||Math.abs(end[0]-active.row.latitude)>.0001||Math.abs(end[1]-active.row.longitude)>.0001)return;
@@ -74,6 +78,7 @@ export default function CampusShell({supabaseConfig}) {
       }
     };
     window.addEventListener('message', receive);
+    frame.current?.contentWindow?.postMessage({type:'knu:ping'},location.origin);
     return () => {clearInterval(timer); window.removeEventListener('message', receive);};
   }, []);
   useEffect(() => {
@@ -133,7 +138,7 @@ export default function CampusShell({supabaseConfig}) {
   }
   function edit(row) {
     searchGeneration.current++; setResults([]); setSearching(false); setDeleteId(null);
-    setEditing(row?.id || null); setSecond(null); setForm(row ? {...row, start: classEditor.snapTime(row.start_minute), end: classEditor.snapTime(row.end_minute)} : emptyForm());
+    setEditing(row?.id || null); setSecond(null); setForm(row ? {...courseGroups.withOverrides(courseGroups.groupCourses(classes).find(group=>group.meetings.some(item=>item.id===row.id)).meetings).find(item=>item.id===row.id), start: classEditor.snapTime(row.start_minute), end: classEditor.snapTime(row.end_minute)} : emptyForm());
     setPlace(row ? {name: row.place_name, coords: [row.latitude,row.longitude]} : null); setPlaceQuery(row?.place_name || '');if(row)editorSection.current?.scrollIntoView({block:'start',behavior:'smooth'});
   }
   async function searchPlace() {
@@ -168,9 +173,9 @@ export default function CampusShell({supabaseConfig}) {
     event.preventDefault(); if (!place) {setStatus('강의 장소를 검색 결과에서 선택해주세요.');dialog.current?.scrollTo({top:0}); return;}
     try {
       const input = timetable.validateClass({...form, weekday: Number(form.weekday), start_minute: minutes(form.start), end_minute: minutes(form.end),display_end_minute:Math.min(1439,minutes(form.end)+15),place_name: place.name, latitude: place.coords[0], longitude: place.coords[1]});
-      if(editing) mutate('PATCH',{...input,id:editing});
+      if(editing){const group=courseGroups.groupCourses(classes).find(group=>group.meetings.some(row=>row.id===editing)),index=group.meetings.findIndex(row=>row.id===editing);mutate('PATCH',{classes:courseGroups.updateMeeting(group.meetings,index,{...input,id:editing})});}
       else {
-        const meetings=[{weekday:input.weekday,start_minute:input.start_minute,end_minute:input.end_minute,display_end_minute:input.display_end_minute},...(second?[{weekday:Number(second.weekday),start_minute:minutes(second.start),end_minute:minutes(second.end),display_end_minute:Math.min(1439,minutes(second.end)+15)}]:[])];
+        const meetings=[{weekday:input.weekday,start_minute:input.start_minute,end_minute:input.end_minute,display_end_minute:input.display_end_minute},...(second?[{weekday:Number(second.weekday),start_minute:minutes(second.start),end_minute:minutes(second.end),display_end_minute:Math.min(1439,minutes(second.end)+15),...(second.location_override?{location_override:true,place_name:second.place?.name,latitude:second.place?.coords[0],longitude:second.place?.coords[1],room:second.room||''}:{})}]:[])];
         const payload={...input,meetings};timetable.validateClassMeetings(payload);mutate('POST',payload);
       }
     } catch (error) {setStatus(error.message);dialog.current?.scrollTo({top:0});}
@@ -180,9 +185,8 @@ export default function CampusShell({supabaseConfig}) {
     const classStart=timetable.nextOccurrence(row);
     if(!classStart){setStatus('학기 기간이 지난 수업입니다. 학기 날짜를 수정해주세요.');return;}
     let favorite=null;try{if(row.favorite_route)favorite=classTrip.validateFavorite(row.favorite_route);}catch{/* Old or invalid preference: request a fresh route. */}
-    const active={row,classStart,route:favorite,estimate:Boolean(favorite),loading:true,status:favorite?'저장된 출발지에서 즐겨찾기 경로를 다시 조회합니다.':'현재 위치를 확인해 출발 시각을 계산합니다. 위치 사용이 어려우면 지도에서 출발지를 검색해주세요.'};setTrip(active);tripRef.current=active;
-    frame.current.contentWindow.postMessage({type:'knu:destination',classId:row.id,place:{name:row.place_name,coords:[row.latitude,row.longitude]},course:row.title,classStart,favorite,useCurrentLocation:!favorite},location.origin);
-    setOpen(false);setShellTab('map');
+    const active={row,classStart,origin:sharedOrigin.current,requestId:++tripSequence.current,route:null,options:{},estimate:false,loading:true,status:'공유 출발지에서 수업까지 경로를 확인합니다. 출발지가 없으면 아래에서 선택해주세요.'};setTrip(active);tripRef.current=active;
+    frame.current.contentWindow.postMessage({type:'knu:destination',requestId:active.requestId,classId:row.id,place:{name:row.place_name,coords:[row.latitude,row.longitude]},course:row.title,classStart,favorite,useCurrentLocation:false},location.origin);
   }
   const change = key => event => setForm(previous => ({...previous, [key]: event.target.value}));
   const changeTime = (key,value,extra=false) => {
@@ -201,7 +205,8 @@ export default function CampusShell({supabaseConfig}) {
     <dialog ref={dialog} className="timetable-dialog schedule-page" onCancel={() => selectShellTab('map')} onClose={() => {setOpen(false);setShellTab(previous=>previous==='schedule'?'map':previous);}}>
       <header className="dialog-heading"><div><h1>내 시간표</h1><p>저장한 강의 장소로 도보 길찾기를 시작하세요.</p></div><button aria-label="시간표 닫기" onClick={() => selectShellTab('map')}>지도로</button></header>
     {trip&&<section className="class-trip" aria-label="선택한 수업 이동 안내"><div className="trip-content"><span className="eyebrow">MAKE IT BEFORE CLASS</span><strong>{trip.row.title}{trip.row.room?' · '+trip.row.room+'호':''} · {new Date(trip.classStart).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false})}</strong>
-      <ClassJourney key={trip.row.id+':'+(trip.origin?.coords.join(',')||'pending')} row={trip.row} origin={trip.origin} route={trip.route} classStart={trip.classStart} onMode={mode=>{setOpen(false);setShellTab('map');frame.current?.contentWindow?.postMessage({type:'knu:class-mode',classId:trip.row.id,mode},location.origin);}}/>
+      <div className="trip-origin"><PlacePicker label="출발지 검색" value={trip.origin} onChange={place=>{if(!place)return;sharedOrigin.current=place;const requestId=++tripSequence.current;const active={...tripRef.current,origin:place,requestId,route:null,options:{},loading:true};setTrip(active);tripRef.current=active;frame.current?.contentWindow?.postMessage({type:'knu:class-origin-set',classId:active.row.id,requestId,start:place},location.origin);}}/><button type="button" onClick={()=>{const requestId=++tripSequence.current;const active={...tripRef.current,requestId,status:'현재 위치 확인 중…'};setTrip(active);tripRef.current=active;frame.current?.contentWindow?.postMessage({type:'knu:class-location',classId:active.row.id,requestId},location.origin);}}>⌖ 현재 위치로 설정</button><small>{trip.origin?'출발: '+trip.origin.name:'위치 권한 없이 장소를 직접 검색할 수 있습니다.'}</small></div>
+      <ClassJourney row={trip.row} origin={trip.origin} route={trip.route} options={trip.options} loading={trip.loading} status={trip.status} classStart={trip.classStart} onMode={mode=>{const requestId=++tripSequence.current;const active={...tripRef.current,requestId,route:null,loading:true};setTrip(active);tripRef.current=active;setOpen(false);setShellTab('map');frame.current?.contentWindow?.postMessage({type:'knu:class-mode',classId:active.row.id,requestId,mode},location.origin);}}/>
       {trip.route&&<p className="trip-deadline">{new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})}까지 출발 <small>{trip.estimate?'저장된 예상 시간 · ':''}{Math.ceil(trip.route.duration/60)}분 이동 + 내부 {trip.route.indoorMinutes}분 + 여유 {trip.route.safetyMinutes}분</small></p>}
       <p role="status">{trip.status}</p><ClassWeather data={weather} departure={trip.route?classTrip.departureAt(trip.classStart,trip.route):Date.parse(trip.classStart)} classStart={trip.classStart}/>{trip.route&&<small>{trip.route.start.name} → {trip.row.place_name} · 예상 시각이며 교통 상황에 따라 달라집니다. 즐겨찾기는 출발지도 함께 저장합니다.</small>}</div><div className="trip-actions">
       <button disabled={busy||(!trip.route&&!trip.row.favorite_route)} onClick={()=>mutate('PUT',{id:trip.row.id,favorite_route:trip.row.favorite_route?null:trip.route})}>{trip.row.favorite_route?'★ 즐겨찾기 해제':'☆ 이 경로 즐겨찾기'}</button><button aria-label="수업 이동 안내 닫기" onClick={()=>setTrip(null)}>닫기</button>
@@ -227,14 +232,14 @@ export default function CampusShell({supabaseConfig}) {
           <section ref={editorSection} className="class-editor"><h2>{editing ? '수업 수정' : '수업 등록'}</h2>
             <form className="schedule-form" onSubmit={save}>
               <fieldset disabled={busy}>
-                <label>수업명<input value={form.title} onChange={change('title')} maxLength={100} required /></label>
+                {editing&&<label className="override-toggle"><input type="checkbox" checked={Boolean(form.location_override)} onChange={event=>setForm(previous=>({...previous,location_override:event.target.checked}))}/>이 회차만 다른 건물·강의실 (수업명·교수명은 공통)</label>}<label>수업명<input value={form.title} onChange={change('title')} maxLength={100} required /></label>
                 <label>학기<input value={form.term} onChange={change('term')} maxLength={60} required /></label>
                 <section className="meeting-editor" aria-label="1회차 수업"><h3>{second?'1회차':'수업 시간'}</h3>
                   <label>요일<select value={form.weekday} onChange={change('weekday')}>{days.map((day,index) => <option key={day} value={index+1}>{day}요일</option>)}</select></label>
                   <div className="form-pair"><TimePicker label="시작 시각" value={form.start} onChange={value=>changeTime('start',value)} /><TimePicker label="종료 시각" value={form.end} onChange={value=>changeTime('end',value)} /></div>
                 </section>
                 {!editing && <button type="button" aria-pressed={Boolean(second)} onClick={()=>setSecond(previous=>previous?null:classEditor.secondMeeting(form))}>{second?'− 2회차 빼기':'+ 주 2회 수업 추가'}</button>}
-                {second && <section className="meeting-editor" aria-label="2회차 수업"><h3>2회차</h3>
+                {second && <section className="meeting-editor" aria-label="2회차 수업"><h3>2회차</h3><label className="override-toggle"><input type="checkbox" checked={Boolean(second.location_override)} onChange={event=>setSecond(previous=>({...previous,location_override:event.target.checked,place:previous.place||place,room:previous.room||form.room}))}/>2회차만 다른 건물·강의실</label>{second.location_override?<><PlacePicker value={second.place} onChange={place=>setSecond(previous=>({...previous,place}))}/><label>2회차 강의실<input value={second.room||''} onChange={event=>setSecond(previous=>({...previous,room:event.target.value}))}/></label></>:<p className="auth-help">공통 정보: {form.title||'수업명 입력 전'} · {place?.name||'건물 선택 전'} {form.room} · {form.professor}</p>}
                   <label>2회차 요일<select value={second.weekday} onChange={event=>setSecond(previous=>({...previous,weekday:Number(event.target.value)}))}>{days.map((day,index)=><option key={day} value={index+1}>{day}요일</option>)}</select></label>
                   <div className="form-pair"><TimePicker label="2회차 시작 시각" value={second.start} onChange={value=>changeTime('start',value,true)} /><TimePicker label="2회차 종료 시각" value={second.end} onChange={value=>changeTime('end',value,true)} /></div>
                 </section>}

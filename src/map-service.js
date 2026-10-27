@@ -1,3 +1,13 @@
+function visibleMapRect(){
+ const container=document.getElementById('map'),bounds=container.getBoundingClientRect();
+ let top=0,left=0,right=bounds.width,bottom=bounds.height;
+ for(const selector of ['.campus-topbar','.campus-shortcuts','.route-panel']){
+  const el=document.querySelector(selector);if(!el||!el.getClientRects().length)continue;const rect=el.getBoundingClientRect();
+  if(selector!=='.route-panel'){top=Math.max(top,rect.bottom-bounds.top+10);continue;}
+  if(rect.width>bounds.width*.7)bottom=Math.min(bottom,rect.top-bounds.top-8);else left=Math.max(left,rect.right-bounds.left+8);
+ }
+ return {top:Math.max(0,top),left:Math.max(0,left),right:Math.min(bounds.width,right),bottom:Math.max(top+40,Math.min(bounds.height,bottom)),width:bounds.width,height:bounds.height};
+}
 async function createCampusMap() {
   try {
     await new Promise((resolve, reject) => {
@@ -41,6 +51,10 @@ function createKakaoMap() {
   }
   const view = {
     provider: 'kakao',
+    refresh:()=>{const center=native.getCenter();native.relayout();if(fittedPath)fit(fittedPath);else native.setCenter(center);},
+    schoolHome:scope=>{fittedPath=null;const rect=visibleMapRect(),bounds=new kakao.maps.LatLngBounds();const points=scope==='outside'?[[35.882,128.603],[35.896,128.622]]:[[35.8847,128.607],[35.8933,128.618]];points.forEach(p=>bounds.extend(coord(p)));native.setBounds(bounds,rect.top+15,rect.width-rect.right+15,rect.height-rect.bottom+15,rect.left+15);},
+    visibleBounds:()=>{const r=visibleMapRect(),projection=native.getProjection(),sw=projection.coordsFromContainerPoint(new kakao.maps.Point(r.left,r.bottom)),ne=projection.coordsFromContainerPoint(new kakao.maps.Point(r.right,r.top));return {south:sw.getLat(),west:sw.getLng(),north:ne.getLat(),east:ne.getLng()};},
+    onMove:handler=>kakao.maps.event.addListener(native,'idle',handler),
     campusHome: () => {fittedPath=null;native.setLevel(4);native.setCenter(coord([35.889,128.612]));},
     panTo: point => native.panTo(coord(point)),
     setType: sky => native.setMapTypeId(sky ? kakao.maps.MapTypeId.HYBRID : kakao.maps.MapTypeId.ROADMAP),
@@ -62,14 +76,16 @@ function createKakaoMap() {
       };
       service.categorySearch(category, callback, {rect,size:15});
     }))).then(groups=>[...new Map(groups.flat().map(p=>[p.id,p])).values()]),
-    schoolSurroundings: category => new Promise((resolve,reject)=>{
-      const results=[],service=new kakao.maps.services.Places();
+    schoolSurroundings:(category,area)=>new Promise((resolve,reject)=>{
+      if(!area||![area.south,area.west,area.north,area.east].every(Number.isFinite)||area.north<=area.south||area.east<=area.west)return reject(Error('지도를 조금 확대한 뒤 다시 검색해주세요.'));
+      if(area.north-area.south>.15||area.east-area.west>.2)return reject(Error('검색 영역이 너무 넓습니다. 지도를 확대해주세요.'));
+      const results=[],service=new kakao.maps.services.Places(),timer=setTimeout(()=>reject(Error('시설 조회 시간이 초과됐습니다.')),15000);
       service.categorySearch(category,(items,status,pagination)=>{
-        if(status===kakao.maps.services.Status.ZERO_RESULT)return resolve([]);
-        if(status!==kakao.maps.services.Status.OK)return reject(new Error('학교 주변 시설을 불러오지 못했습니다.'));
-        results.push(...items.filter(p=>!/대학로 80(?:\s|$)|산격동 1370(?:-1)?(?:\s|$)/.test(p.road_address_name+' '+p.address_name)).map(p=>({id:p.id,name:p.place_name,coords:[Number(p.y),Number(p.x)],address:p.road_address_name||p.address_name,category})));
-        if(pagination.hasNextPage)pagination.nextPage();else resolve(results);
-      },{location:coord([35.889,128.612]),radius:2000,sort:'distance',size:15});
+        if(status===kakao.maps.services.Status.ZERO_RESULT){clearTimeout(timer);return resolve([]);}
+        if(status!==kakao.maps.services.Status.OK){clearTimeout(timer);return reject(Error('학교 주변 시설을 불러오지 못했습니다.'));}
+        results.push(...items.filter(p=>!/대학로 80(?:\s|$)|산격동 1370(?:-1)?(?:\s|$)/.test(p.road_address_name+' '+p.address_name)).map(p=>({id:p.id,name:p.place_name,coords:[Number(p.y),Number(p.x)],address:p.road_address_name||p.address_name,category})).filter(p=>p.coords[0]>=area.south&&p.coords[0]<=area.north&&p.coords[1]>=area.west&&p.coords[1]<=area.east));
+        if(pagination.hasNextPage)pagination.nextPage();else{clearTimeout(timer);resolve([...new Map(results.map(p=>[p.id,p])).values()]);}
+      },{rect:[area.west,area.south,area.east,area.north].join(','),size:15});
     }),
     search: keyword => new Promise((resolve, reject) => {
       new kakao.maps.services.Places().keywordSearch(keyword, (places, status) => {
@@ -94,7 +110,7 @@ function createLeafletMap() {
     if (fittedPath) native.fitBounds(fittedPath, {padding: [45, 55]});
   }).observe(document.getElementById('map'));
   return {
-    provider: 'leaflet', panTo: point => native.panTo(point),
+    provider: 'leaflet', refresh:()=>native.invalidateSize(), schoolHome:scope=>{fittedPath=null;const r=visibleMapRect();native.fitBounds(scope==='outside'?[[35.882,128.603],[35.896,128.622]]:[[35.8847,128.607],[35.8933,128.618]],{paddingTopLeft:[r.left+15,r.top+15],paddingBottomRight:[r.width-r.right+15,r.height-r.bottom+15]});}, panTo: point => native.panTo(point),
     setType: sky => { native.removeLayer(sky ? tiles : skyTiles); (sky ? skyTiles : tiles).addTo(native); },
     removeLayer: object => object.remove(),
     polygon: (points, options) => wrap(L.polygon(points, options).addTo(native)),

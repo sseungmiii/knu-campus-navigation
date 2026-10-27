@@ -15,12 +15,16 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),{PGlite}=requir
     await db.exec('reset role;');await db.exec(fs.readFileSync(require.resolve('../supabase/migrations/202610230001_verified_schedule_members.sql'),'utf8'));
     await db.exec(fs.readFileSync(require.resolve('../supabase/migrations/20261022155625_class_route_favorites.sql'),'utf8'));
     await db.exec(fs.readFileSync(require.resolve('../supabase/migrations/20261026155418_timetable_import_details.sql'),'utf8'));
+    await db.exec(fs.readFileSync(require.resolve('../supabase/migrations/20261027061219_course_location_override.sql'),'utf8'));
     for(const id of ids.slice(0,3)){await login(id);assert.equal((await db.query('select public.is_schedule_user() as allowed')).rows[0].allowed,true);await insert(id);await assert.rejects(()=>insert(ids[3]));}
     await login(ids[0]);assert.equal((await db.query('select id from public.timetable_classes where id=$1',[original])).rows.length,1,'Existing classes survive the eligibility migration');
     assert.equal((await db.query('select room from public.timetable_classes where id=$1',[original])).rows[0].room,'');
+    assert.equal((await db.query('select location_override from public.timetable_classes where id=$1',[original])).rows[0].location_override,null);
+    await db.query('update public.timetable_classes set location_override=true where id=$1',[original]);
     await db.query("update public.timetable_classes set room='317',professor='검증',display_end_minute=end_minute+15 where id=$1",[original]);
     await assert.rejects(()=>db.query('update public.timetable_classes set display_end_minute=end_minute-1 where id=$1',[original]));
     await login(ids[2]);assert.equal((await db.query('select id from public.timetable_classes where id=$1',[original])).rows.length,0);
+    assert.equal((await db.query('update public.timetable_classes set location_override=false where id=$1 returning id',[original])).rows.length,0);
     assert.equal((await db.query(`update public.timetable_classes set favorite_route='{}' where id=$1 returning id`,[original])).rows.length,0,'Favorite updates cannot access another owner');
     await db.query(`update public.timetable_classes set favorite_route='{"mode":"walk"}'`);
     assert.equal((await db.query(`select favorite_route->>'mode' as mode from public.timetable_classes`)).rows[0].mode,'walk');

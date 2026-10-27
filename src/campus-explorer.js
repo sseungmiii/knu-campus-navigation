@@ -8,29 +8,47 @@ const campusDining = [
 ].map(p=>({...p,category:'meal',address:'대구 북구 대학로 80'}));
 let campusFacilities=[...campusDining],campusPins=[],campusFilter='all',campusSearchGeneration=0,campusSelectedPin=null;
 const campusCategoryNames={meal:'학식당',FD6:'식당',CE7:'카페',CS2:'편의점'},campusIcons={meal:'♧',FD6:'♧',CE7:'☕',CS2:'▣'};
-let facilityScope='inside',facilityCategory='all',outsideFacilities=[],facilityLoadGeneration=0;
+let facilityScope='inside',facilityCategory='all',outsideFacilities=[],facilityLoadGeneration=0,schoolTab=null,facilityNote='';
+function leaveSchoolFacilities(){if(!schoolTab)return;schoolTab=null;facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());}
 function renderSchoolFacilities(){
   const rows=(facilityScope==='inside'?campusFacilities:outsideFacilities).filter(row=>facilityCategory==='all'||row.category===facilityCategory),box=$('schoolFacilityResults');box.replaceChildren();
   document.querySelectorAll('[data-school-category]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.schoolCategory===facilityCategory)));
   for(const row of rows){const button=textNode('button','','school-facility-row');button.type='button';button.append(textNode('strong',row.name),textNode('small',(campusCategoryNames[row.category]||'시설')+' · '+row.address));button.onclick=()=>{document.body.classList.remove('panel-open');openCampusPlace(row);};box.append(button);}
-  $('schoolFacilityStatus').textContent=rows.length?`${rows.length}곳 · 카카오 장소 정보 기준`:'표시할 시설이 없습니다. 다른 종류를 선택해보세요.';
+  renderCampusPins(rows);
+  $('schoolFacilityStatus').textContent=rows.length?`${rows.length}곳 · 카카오 장소 정보 기준`:'표시할 시설이 없습니다. 다른 종류나 지도 영역을 선택해보세요.';
+  $('schoolFacilityStatus').textContent+=facilityNote;
+}
+async function querySchoolArea(){
+ const generation=++facilityLoadGeneration,scope=facilityScope;
+ if(scope==='inside'){await loadCampusFacilities();return;}
+ outsideFacilities=[];facilityNote='';renderSchoolFacilities();$('schoolFacilityStatus').textContent='현재 보이는 지도 영역에서 시설 조회 중…';
+ if(!map.schoolSurroundings||!map.visibleBounds){$('schoolFacilityStatus').textContent='카카오지도 연결 후 주변 시설을 조회할 수 있습니다.';return;}
+ const bounds=map.visibleBounds(),results=await Promise.allSettled(['FD6','CE7','CS2'].map(category=>map.schoolSurroundings(category,bounds)));
+ if(generation!==facilityLoadGeneration||schoolTab!=='outside')return;
+ outsideFacilities=[...new Map(results.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(row=>[row.id,row])).values()];
+ facilityNote=results.some(r=>r.status==='rejected')?' · 일부 조회 실패: '+results.find(r=>r.status==='rejected').reason.message:' · 카카오 제공 결과 일부입니다. 더 확대해서 검색할 수 있습니다.';
+ renderSchoolFacilities();
 }
 async function showShellTab(tab){
-  $('campusPlaceCard').hidden=true;$('campusSearchResults').hidden=true;campusSelectedPin?.remove();
-  if(tab==='map'){document.body.classList.remove('panel-open');return;}
-  if(tab==='route-nearby'){showPurpose('nearby');return;}
-  if(!['inside','outside'].includes(tab))return;
-  facilityScope=tab;facilityCategory='all';const generation=++facilityLoadGeneration;
-  $('schoolFacilityTitle').textContent=tab==='inside'?'학교 내부 시설':'학교 주변 식당·카페';
-  $('schoolFacilityDescription').textContent=tab==='inside'?'학식당·카페·편의점을 한곳에서 확인하세요. 건물은 상단 장소 검색으로 찾을 수 있어요.':'경북대 대구캠퍼스 중심 2km 안의 식당·카페·편의점을 함께 조회합니다. 영업 여부는 방문 전 확인해주세요.';
-  showPurpose('facilities');renderSchoolFacilities();
-  if(tab==='outside'&&!outsideFacilities.length){
-    $('schoolFacilityStatus').textContent='학교 주변 식당·카페·편의점을 찾고 있어요…';
-    if(!map.schoolSurroundings){$('schoolFacilityStatus').textContent='카카오지도 연결 후 주변 시설을 조회할 수 있습니다.';return;}
-    const results=await Promise.allSettled(['FD6','CE7','CS2'].map(category=>map.schoolSurroundings(category)));if(generation!==facilityLoadGeneration)return;
-    outsideFacilities=[...new Map(results.flatMap(result=>result.status==='fulfilled'?result.value:[]).map(row=>[row.id,row])).values()];renderSchoolFacilities();
-    if(results.some(result=>result.status==='rejected'))$('schoolFacilityStatus').textContent+=' · 일부 조회 실패, 다시 조회해주세요.';
-  }
+ $('campusPlaceCard').hidden=true;$('campusSearchResults').hidden=true;campusSelectedPin?.remove();
+ if(!['inside','outside'].includes(tab)){schoolTab=null;facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());document.body.classList.remove('school-sheet','sheet-collapsed');if(tab==='map'){document.body.classList.remove('panel-open');map.refresh?.();}else if(tab==='route-nearby')showPurpose('nearby');return;}
+ const entering=schoolTab!==tab;schoolTab=tab;facilityScope=tab;
+ if(entering){facilityCategory='all';facilityNote='';document.body.classList.remove('sheet-collapsed');$('schoolSheetHandle').setAttribute('aria-expanded','true');$('schoolSheetHandle').setAttribute('aria-label','학교 패널 접기');facilityLoadGeneration++;if(typeof facilityLayers!=='undefined')facilityLayers.splice(0).forEach(p=>p.remove());}
+ $('schoolFacilityTitle').textContent=tab==='inside'?'학교 내부 시설':'학교 주변 시설';
+ $('schoolFacilityDescription').textContent=tab==='inside'?'교내 주소로 확인된 시설입니다. 범주를 선택하면 목록과 핀이 함께 바뀝니다.':'패널 위 실제 보이는 지도 영역에서 검색합니다. 지도를 옮긴 뒤 재검색하세요.';
+ $('refreshSchoolFacilities').textContent=tab==='outside'?'이 지도에서 재검색':'교내 시설 다시 조회';
+ showPurpose('facilities');renderSchoolFacilities();
+ if(entering){map.schoolHome?.(tab);if(tab==='outside')await querySchoolArea();}
+}
+function initSchoolSheet(){
+ const handle=$('schoolSheetHandle'),panel=document.querySelector('.route-panel');let start=null,moved=false;
+ const settle=collapsed=>{document.body.classList.toggle('sheet-collapsed',collapsed);handle.setAttribute('aria-expanded',String(!collapsed));handle.setAttribute('aria-label',collapsed?'학교 패널 펼치기':'학교 패널 접기');panel.style.transform='';if(collapsed)panel.scrollTop=0;};
+ handle.onclick=()=>{if(moved){moved=false;return;}settle(!document.body.classList.contains('sheet-collapsed'));};
+ handle.onpointerdown=event=>{if(event.button!==0)return;start={y:event.clientY,base:document.body.classList.contains('sheet-collapsed')?panel.offsetHeight-84:0};moved=false;handle.setPointerCapture(event.pointerId);};
+ handle.onpointermove=event=>{if(!start)return;const delta=event.clientY-start.y;if(Math.abs(delta)>5)moved=true;panel.style.transform=`translateY(${Math.max(0,Math.min(panel.offsetHeight-84,start.base+delta))}px)`;};
+ handle.onpointerup=event=>{if(!start)return;const delta=event.clientY-start.y;if(moved)settle(delta>30?true:delta< -30?false:start.base>0);else panel.style.transform='';start=null;};
+ handle.onpointercancel=()=>{start=null;panel.style.transform='';};
+ $('schoolReturn').onclick=()=>map.schoolHome?.(facilityScope);
 }
 function campusDestination(place,kind='end') {
   showPurpose('route');selectPlace(kind,{...place,name:place.building||place.name});
@@ -47,9 +65,9 @@ function openCampusPlace(place) {
   if(place.category==='meal'){const button=textNode('button','오늘 식단 보기','secondary');button.onclick=()=>{showPurpose('meals');$('loadMeals').click();box.hidden=true;};actions.append(button);}
   box.append(actions);
 }
-function renderCampusPins() {
+function renderCampusPins(rows) {
   campusPins.splice(0).forEach(p=>p.remove());
-  for(const place of campusFacilities.filter(p=>campusFilter==='all'||p.category===campusFilter)){
+  for(const place of rows||campusFacilities.filter(p=>campusFilter==='all'||p.category===campusFilter)){
     const button=textNode('button','','campus-pin pin-'+place.category);button.type='button';button.setAttribute('aria-label',`${place.name} · ${campusCategoryNames[place.category]}`);
     button.append(textNode('span',campusIcons[place.category],'pin-icon'),textNode('span',place.name,'pin-name'));
     button.onclick=event=>{event.stopPropagation();openCampusPlace(place);};
@@ -58,16 +76,17 @@ function renderCampusPins() {
 }
 async function loadCampusFacilities() {
   if(!map.campusPlaces){$('campusPlacesStatus').textContent='학식당 위치 표시 · 카카오 연결 후 카페·편의점을 조회할 수 있습니다.';return;}
-  const results=await Promise.allSettled(['CE7','CS2'].map(category=>map.campusPlaces(category)));
-  campusFacilities=[...campusDining,...results.flatMap(r=>r.status==='fulfilled'?r.value:[])];renderCampusPins();
-  if($('schoolFacilityResults'))renderSchoolFacilities();
+  const results=await Promise.allSettled(['FD6','CE7','CS2'].map(category=>map.campusPlaces(category)));
+  campusFacilities=[...campusDining,...results.flatMap(r=>r.status==='fulfilled'?r.value:[])];if(!schoolTab)renderCampusPins();
+  if(schoolTab==='inside')renderSchoolFacilities();
   $('campusPlacesStatus').replaceChildren(textNode('span',`학식당 ${campusDining.length}곳 · 카페 ${campusFacilities.filter(p=>p.category==='CE7').length}곳 · 편의점 ${campusFacilities.filter(p=>p.category==='CS2').length}곳`));
   if(results.some(r=>r.status==='rejected')){const retry=textNode('button','일부 시설 조회 실패 · 다시 시도');retry.onclick=loadCampusFacilities;$('campusPlacesStatus').append(retry);}
 }
 function initCampusExplorer() {
   if(new URLSearchParams(location.search).get('shell')==='1')document.body.classList.add('shell-embedded');
   document.querySelectorAll('[data-school-category]').forEach(button=>button.onclick=()=>{facilityCategory=button.dataset.schoolCategory;renderSchoolFacilities();});
-  $('refreshSchoolFacilities').onclick=()=>{outsideFacilities=[];showShellTab(facilityScope);};
+  initSchoolSheet();$('refreshSchoolFacilities').onclick=querySchoolArea;
+  map.onMove?.(()=>{if(schoolTab==='outside')$('refreshSchoolFacilities').textContent='이 지도에서 재검색';});
   const home=()=>map.campusHome ? map.campusHome() : map.fitPath([[35.885,128.607],[35.893,128.617]]);
   $('campusHome').onclick=()=>{document.body.classList.remove('panel-open');$('campusPlaceCard').hidden=true;campusSelectedPin?.remove();home();};
   $('closePanel').onclick=()=>document.body.classList.remove('panel-open');

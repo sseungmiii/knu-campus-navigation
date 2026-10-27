@@ -2,34 +2,49 @@ if(typeof URLSearchParams!=='undefined'&&typeof location.search==='string'&&new 
 let map, pacemaker;
 const places = {start: null, end: null};
 let selectedRoute = null, routeController = null, routeGeneration = 0, positionGeneration = 0;
-let activeClassId=null, preferredClassRoute=null;
+let activeClassId=null, preferredClassRoute=null,activeRequestId=null;
+const classRouteCache=new Map();
+function validPlace(p){return typeof p?.name==='string'&&p.name.trim()&&p.name.length<=150&&Array.isArray(p.coords)&&p.coords.length===2&&p.coords.every(Number.isFinite)&&Math.abs(p.coords[0])<=90&&Math.abs(p.coords[1])<=180;}
+async function routeData(mode,start,end,routeMode){
+ const key=JSON.stringify([mode,start.coords,end.coords,routeMode]),old=classRouteCache.get(key),ttl=mode==='walk'?120000:30000;
+ if(old&&Date.now()-old.at<ttl)return old.promise;
+ const entry={at:Date.now(),promise:null};entry.promise=fetch(`${apiBase}/api/${mode==='walk'?'walk':'transit'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start,end,routeMode}),signal:AbortSignal.timeout(mode==='walk'?18000:45000)}).then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.error||'경로 조회 실패');return data;}).catch(error=>{if(classRouteCache.get(key)===entry)classRouteCache.delete(key);throw error;});
+ if(classRouteCache.size>20)classRouteCache.clear();classRouteCache.set(key,entry);return entry.promise;
+}
+async function compareClassRoute(generation){
+ if(!activeClassId||!places.start||!places.end)return;
+ const mode=$('transportMode').value==='walk'?'transit':'walk',classId=activeClassId,requestId=activeRequestId;
+ try{const data=await routeData(mode,places.start,places.end,$('routeMode').value);if(generation!==routeGeneration||classId!==activeClassId||requestId!==activeRequestId)return;
+ const best=mode==='walk'?data:transitCandidates(data.routes,'ALL','TRANSFERS')[0];if(best)window.parent.postMessage({type:'knu:class-option',classId,requestId,mode,duration:best.duration,incomplete:best.connectionsComplete===false},location.origin);
+ }catch{/* The selected route remains usable; the other mode can be retried explicitly. */}
+}
+
 const layers = [];
 const searchGenerations = {start: 0, end: 0};
 const $ = id => document.getElementById(id);
 const apiBase = ROUTING_API_BASE_URL.replace(/\/$/, '');
 const localBackend = ['127.0.0.1', 'localhost'].includes(location.hostname);
 const hasBackend = Boolean(apiBase) || localBackend || location.hostname === 'knu-campus-navigation.vercel.app';
-function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); if(activeClassId)window.parent.postMessage({type:'knu:trip-status',classId:activeClassId,status:text,error},location.origin); }
+function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); if(activeClassId)window.parent.postMessage({type:'knu:trip-status',classId:activeClassId,requestId:activeRequestId,status:text,error},location.origin); }
 function classRouteSignature(route) {return (route.steps||[]).filter(step=>step.type!=='WALKING').map(step=>`${step.type}:${(step.vehicles||[]).join('/')}:${step.boardingStop?.id||step.stops?.[0]||''}`).join('|').slice(0,500);}
 function notifyClassRoute() {
   if(!activeClassId||!selectedRoute||!places.start||!places.end)return;
-  window.parent.postMessage({type:'knu:class-route',classId:activeClassId,end:places.end.coords,incomplete:selectedRoute.connectionsComplete===false,route:{start:places.start,mode:$('transportMode').value,routeMode:$('routeMode').value,duration:selectedRoute.duration,signature:classRouteSignature(selectedRoute),indoorMinutes:Number($('indoorMinutes').value),safetyMinutes:Number($('safetyMinutes').value)}},location.origin);
+  window.parent.postMessage({type:'knu:class-route',classId:activeClassId,requestId:activeRequestId,end:places.end.coords,incomplete:selectedRoute.connectionsComplete===false,route:{start:places.start,mode:$('transportMode').value,routeMode:$('routeMode').value,duration:selectedRoute.duration,signature:classRouteSignature(selectedRoute),indoorMinutes:Number($('indoorMinutes').value),safetyMinutes:Number($('safetyMinutes').value)}},location.origin);
 }
 function formatDistance(meters) { return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`; }
 function updateReady() { $('findRoute').disabled = !map || !places.start || !places.end; }
-function invalidateClassOrigin(){if(activeClassId)window.parent.postMessage({type:'knu:class-origin-clear',classId:activeClassId},location.origin);}
+function invalidateClassOrigin(){if(activeClassId)window.parent.postMessage({type:'knu:class-origin-clear',classId:activeClassId,requestId:activeRequestId},location.origin);}
 function clearRoute() {
-  if(activeClassId)window.parent.postMessage({type:'knu:route-pending',classId:activeClassId},location.origin);
+  if(activeClassId)window.parent.postMessage({type:'knu:route-pending',classId:activeClassId,requestId:activeRequestId},location.origin);
   if(typeof mobilityClear==='function')mobilityClear();
   routeGeneration++; routeController?.abort(); routeController = null;
   pacemaker?.stop(); selectedRoute = null; layers.splice(0).forEach(layer => layer.remove());
-  $('routeSummary').hidden = $('pacePanel').hidden = true; $('mapEmptyHint').hidden = false;
+  $('routeSummary').hidden = $('pacePanel').hidden = true;if($('openPace'))$('openPace').hidden=true; $('mapEmptyHint').hidden = false;
   $('paceProgress').value = 0; $('paceRemaining').textContent = $('paceTime').textContent = '—';
   $('findRoute').textContent = '도보 경로 찾기'; updateReady();
 }
 function selectPlace(kind, place) {
-  invalidateClassOrigin();
-  if (kind === 'start') positionGeneration++;
+  if(kind==='start'){invalidateClassOrigin();positionGeneration++;window.parent.postMessage({type:'knu:shared-origin',start:place},location.origin);}
   clearRoute(); places[kind] = place; $(`${kind}Query`).value = place.name;
   $(`${kind}Results`).replaceChildren(); searchGenerations[kind]++;
   message(places.start && places.end ? '장소가 선택되었습니다. 도보 경로를 찾아보세요.' : '다른 장소도 검색 결과에서 선택해주세요.');
@@ -63,20 +78,18 @@ async function search(kind) {
 async function findRoute(event) {
   event.preventDefault();
   if (!places.start || !places.end) { message('출발지와 도착지를 검색 결과에서 선택해주세요.', true); return; }
-  if(activeClassId)window.parent.postMessage({type:'knu:class-origin',classId:activeClassId,start:places.start,end:places.end.coords,mode:$('transportMode').value},location.origin);
+  if(activeClassId)window.parent.postMessage({type:'knu:class-origin',classId:activeClassId,requestId:activeRequestId,start:places.start,end:places.end.coords,mode:$('transportMode').value},location.origin);
   clearRoute();
   if (!hasBackend) { message('현재 길찾기 연결을 준비 중입니다. 잠시 후 다시 시도해주세요.', true); return; }
   const start = {...places.start}, end = {...places.end};
-  if($('transportMode')?.value==='transit') {await transitSearch(start,end,routeGeneration);return;}
+  if($('transportMode')?.value==='transit') {const generation=routeGeneration;await transitSearch(start,end,generation);if(generation===routeGeneration)compareClassRoute(generation);return;}
   if (metersBetween(start.coords, end.coords) < 5) { message('출발지와 도착지가 너무 가깝습니다.', true); return; }
   const generation = routeGeneration; routeController = new AbortController();
   const timeout = setTimeout(() => routeController?.abort(), 18000);
   $('findRoute').disabled = true; $('findRoute').textContent = '경로 찾는 중…'; message('카카오 도보 경로를 찾고 있습니다.');
   try {
-    const response = await fetch(`${apiBase}/api/walk`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({start, end, routeMode: $('routeMode').value}), signal: routeController.signal});
-    const route = await response.json().catch(() => { throw new Error('길찾기 서버에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'); });
-    if (generation !== routeGeneration) return;
-    if (!response.ok) throw new Error(route.error || '경로를 찾지 못했습니다.');
+    const route=await routeData('walk',start,end,$('routeMode').value);
+    if(generation!==routeGeneration)return;
     const metrics = makeRouteMetrics(route.points);
     // Reject disconnected provider segments instead of drawing invented connectors.
     for (let i = 1; i < route.points.length; i++) if (metersBetween(route.points[i - 1], route.points[i]) > 2000) throw new Error('경로 좌표가 이어지지 않습니다. 다른 장소로 다시 검색해주세요.');
@@ -96,10 +109,11 @@ async function findRoute(event) {
     $('routeArrival').textContent = new Date(Date.now() + route.duration * 1000).toLocaleTimeString('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false});
     $('routeInstructions').replaceChildren();
     for (const step of route.instructions) { const li = document.createElement('li'); li.textContent = `${step.text}${step.distance ? ` · ${formatDistance(step.distance)}` : ''}`; $('routeInstructions').appendChild(li); }
-    $('routeSummary').hidden = $('pacePanel').hidden = false;
+    $('routeSummary').hidden = $('pacePanel').hidden = false;if($('openPace'))$('openPace').hidden=false;
     pacemaker.setRoute(selectedRoute); $('paceRemaining').textContent = formatDistance(metrics.total); updatePaceTime(metrics.total);
     message('경로를 지도에 표시했습니다. 아래에서 미리보기 또는 도보 안내를 시작하세요.');
     if(typeof updateDeadline==='function')updateDeadline();
+    compareClassRoute(generation);
   } catch (error) {
     if (generation !== routeGeneration) return;
     message(error.name === 'AbortError' ? '경로 요청 시간이 초과됐습니다. 다시 시도해주세요.' : error.message || '경로를 찾지 못했습니다.', true);
@@ -114,12 +128,14 @@ function updatePaceTime(remaining) {
 function updatePace(state) {
   if (state.message) $('paceStatus').textContent = state.message;
   if (state.mode) {
-    $('paceMode').textContent = {idle: '대기', waiting: '위치 확인', live: 'GPS 안내', preview: '미리보기 · 12배속', 'preview-complete': '미리보기 완료', arrived: '도착'}[state.mode] || '대기';
+    $('paceMode').textContent = {idle: '대기', waiting: '위치 확인', live: 'GPS 안내', preview: '미리보기',paused:'일시정지',stopped:'정지', 'preview-complete': '미리보기 완료', arrived: '도착'}[state.mode] || '대기';
+    $('paceProgress').disabled=['waiting','live'].includes(state.mode);
+    if($('pausePreview'))$('pausePreview').textContent=state.mode==='preview'?'일시정지':'재생';
     $('stopWalking').disabled = ['idle', 'arrived'].includes(state.mode);
     $('startWalking').disabled = ['waiting', 'live'].includes(state.mode);
   }
   if ('remaining' in state) { $('paceRemaining').textContent = Number.isFinite(state.remaining) ? formatDistance(state.remaining) : '위치 확인 중'; updatePaceTime(state.remaining); }
-  if (Number.isFinite(state.progress)) $('paceProgress').value = state.progress;
+  if (Number.isFinite(state.progress)) {$('paceProgress').value=state.progress;if($('paceElapsed'))$('paceElapsed').textContent=`경과 ${Math.floor((state.elapsed||0)/60)}분 ${Math.floor((state.elapsed||0)%60)}초 · ${Math.round(state.progress)}%`;}
 }
 function getPosition() {
   return new Promise((resolve, reject) => {
@@ -147,7 +163,12 @@ async function init() {
   $('fitRoute').onclick = () => selectedRoute && map.fitPath(selectedRoute.points);
   $('previewRoute').onclick = () => pacemaker.preview();
   $('startWalking').onclick = () => pacemaker.startLive();
-  $('stopWalking').onclick = () => { pacemaker.stop(); if (selectedRoute) { $('paceProgress').value = 0; $('paceRemaining').textContent = formatDistance(selectedRoute.metrics.total); updatePaceTime(selectedRoute.metrics.total); } };
+  $('stopWalking').onclick=()=>pacemaker.stop({preserve:true});
+  $('pausePreview').onclick=()=>pacemaker.mode==='preview'?pacemaker.pause():pacemaker.preview();
+  $('resetPreview').onclick=()=>pacemaker.reset();
+  $('previewRate').onchange=()=>pacemaker.setRate(Number($('previewRate').value));
+  $('paceProgress').oninput=()=>pacemaker.seek(Number($('paceProgress').value));
+  $('openPace').onclick=()=>{showPurpose('route');$('pacePanel').scrollIntoView({block:'start',behavior:'smooth'});};
   $('walkSpeed').onchange = () => { pacemaker.setSpeed(Number($('walkSpeed').value)); if (selectedRoute && pacemaker.mode === 'idle') updatePaceTime(selectedRoute.metrics.total); };
   for (const [id, sky] of [['mapTypeRoad', false], ['mapTypeSky', true]]) $(id).onclick = () => {
     if (!map) return;
@@ -166,23 +187,38 @@ window.addEventListener('message', async event => {
   if (event.source !== window.parent || event.origin !== location.origin) return;
   if(event.data?.type==='knu:shell-tab'&&['map','inside','outside','route-nearby'].includes(event.data.tab)&&map){showShellTab(event.data.tab);return;}
   if (event.data?.type === 'knu:ping') {if (map && pacemaker) window.parent.postMessage({type:'knu:map-ready'}, location.origin); return;}
-  if(event.data?.type==='knu:class-mode'&&event.data.classId===activeClassId&&['walk','transit'].includes(event.data.mode)&&places.start&&places.end){$('transportMode').value=event.data.mode;$('walkOptions').hidden=event.data.mode==='transit';$('routeMode').disabled=event.data.mode==='transit';findRoute({preventDefault(){}});return;}
+  if(['knu:class-origin-set','knu:class-location','knu:class-mode'].includes(event.data?.type)&&event.data.classId===activeClassId&&map){
+    activeRequestId=event.data.requestId;
+    if(event.data.type==='knu:class-origin-set'){if(!validPlace(event.data.start))return;selectPlace('start',event.data.start);}
+    if(event.data.type==='knu:class-location'){
+      const generation=++positionGeneration;message('현재 위치 확인 중…');
+      try{const fix=await getPosition();if(generation!==positionGeneration)return;selectPlace('start',{name:'현재 위치',coords:[fix.coords.latitude,fix.coords.longitude]});}
+      catch(error){if(generation===positionGeneration)message(error.message+' 기존 출발지는 유지합니다. 직접 검색도 가능합니다.',true);return;}
+    }
+    if(event.data.type==='knu:class-mode'){
+      if(!['walk','transit'].includes(event.data.mode))return;
+      $('transportMode').value=event.data.mode;$('walkOptions').hidden=event.data.mode==='transit';$('routeMode').disabled=event.data.mode==='transit';
+      map.refresh?.();showPurpose('route',false,false);
+    }
+    if(places.start&&places.end)await findRoute({preventDefault(){}});return;
+  }
   if (event.data?.type !== 'knu:destination' || !map || !pacemaker) return;
   const place = event.data.place;
   if (typeof place?.name !== 'string' || !place.name.trim() || place.name.length > 150 || !Array.isArray(place.coords) || place.coords.length !== 2 || !place.coords.every(Number.isFinite) || Math.abs(place.coords[0]) > 90 || Math.abs(place.coords[1]) > 180) return;
+  positionGeneration++;activeRequestId=event.data.requestId;
   activeClassId=typeof event.data.classId==='string'?event.data.classId:null;
   const favorite=event.data.favorite;
   preferredClassRoute=favorite&&typeof favorite.signature==='string'?favorite:null;
-  if(typeof showPurpose==='function')showPurpose('route');
+  if(typeof showPurpose==='function')showPurpose('route',false,false);
   $('departurePanel').open=true;
   selectPlace('end', {name: place.name, coords: place.coords});
   if(typeof updateDeadline==='function') {const at=Date.parse(event.data.classStart);$('classStart').value=Number.isFinite(at)?new Date(at+9*3600000).toISOString().slice(0,16):'';updateDeadline();}
-  if(favorite&&['walk','transit'].includes(favorite.mode)&&['BROAD_FIRST','SHORTEST','ACCESSIBLE'].includes(favorite.routeMode)&&typeof favorite.start?.name==='string'&&Array.isArray(favorite.start.coords)&&favorite.start.coords.length===2&&favorite.start.coords.every(Number.isFinite)&&Math.abs(favorite.start.coords[0])<=90&&Math.abs(favorite.start.coords[1])<=180){
+  if(!places.start&&favorite&&['walk','transit'].includes(favorite.mode)&&['BROAD_FIRST','SHORTEST','ACCESSIBLE'].includes(favorite.routeMode)&&typeof favorite.start?.name==='string'&&Array.isArray(favorite.start.coords)&&favorite.start.coords.length===2&&favorite.start.coords.every(Number.isFinite)&&Math.abs(favorite.start.coords[0])<=90&&Math.abs(favorite.start.coords[1])<=180){
     $('transportMode').value=favorite.mode;$('walkOptions').hidden=favorite.mode==='transit';$('routeMode').disabled=favorite.mode==='transit';$('routeMode').value=favorite.routeMode;
     $('indoorMinutes').value=Number.isInteger(favorite.indoorMinutes)?Math.max(0,Math.min(30,favorite.indoorMinutes)):3;
     $('safetyMinutes').value=Number.isInteger(favorite.safetyMinutes)?Math.max(0,Math.min(60,favorite.safetyMinutes)):5;
     selectPlace('start',favorite.start);
-  }else if(event.data.useCurrentLocation){
+  }else if(!places.start&&event.data.useCurrentLocation){
     const generation=++positionGeneration;message('수업 길찾기를 위해 현재 위치를 확인하고 있습니다.');
     try{const position=await getPosition();if(generation!==positionGeneration)return;selectPlace('start',{name:'현재 위치',coords:[position.coords.latitude,position.coords.longitude]});}
     catch(error){if(generation===positionGeneration)message(`${error.message} 지도에서 출발지를 검색한 뒤 경로를 찾으면 출발 시각이 표시됩니다.`,true);return;}

@@ -26,3 +26,10 @@ errorCallback({code: 1}); assert.equal(pace.mode, 'idle'); assert.match(updates.
 pace.setRoute(route); pace.startLive(); gpsCallback(fix); gpsCallback({...fix, coords: {...fix.coords, longitude: 128.001}, timestamp: Date.now()});
 assert.equal(updates.at(-1).mode, 'arrived'); assert.equal(pace.mode, 'idle');
 console.log('PASS: selected-route motion, real-time speed, preview completion, GPS rejection/off-route/permission denial/arrival and stale callback cleanup');
+pace.setRoute(route);pace.preview();now+=500;pace.pause();const frozen=pace.base;now+=1000;assert.equal(pace.base,frozen);assert.equal(frames.size,0);
+pace.seek(50);assert.equal(pace.base,pace.metrics.total/2);assert.equal(updates.at(-1).progress,50);
+pace.setRate(2);pace.preview();now+=1000;assert.ok(Math.abs(pace.targetDistance()-pace.metrics.total/2-pace.speed*2)<0.001);
+pace.stop({preserve:true});const stopped=pace.base;assert.ok(stopped>pace.metrics.total/2);pace.preview();assert.equal(pace.base,stopped);
+pace.reset();assert.equal(pace.base,0);assert.equal(updates.at(-1).progress,0);
+pace.startLive();gpsCallback(fix);const before=pace.base;pace.seek(80);assert.equal(pace.base,before);now+=1000;pace.stop({preserve:true});assert.ok(pace.base>before);
+console.log('PASS: pause/resume, rate independence, seek/reset, stop position preservation and GPS seek isolation');

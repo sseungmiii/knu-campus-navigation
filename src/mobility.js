@@ -84,8 +84,7 @@ async function transitSearch(start,end,generation) {
   mobilityController=new AbortController();const controller=mobilityController;
   $('findRoute').disabled=true; $('findRoute').textContent='경로 찾는 중…'; message('버스·지하철 경로를 찾고 있습니다.');
   try{
-    const response=await fetch(`${apiBase}/api/transit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start,end}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(45000)])});
-    const data=await response.json();if(generation!==routeGeneration)return;if(!response.ok)throw new Error(data.error);
+    const data=typeof routeData==='function'?await routeData('transit',start,end,$('routeMode').value):await (await fetch(`${apiBase}/api/transit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start,end}),signal:controller.signal})).json();if(generation!==routeGeneration)return;
     $('transitPanel').hidden=false;
     transitSession={routes:data.routes,start,end};transitType='ALL';$('transitSort').value='TRANSFERS';renderTransitOptions();
     message('최소환승순으로 경로를 표시했습니다. 종류와 정렬을 바꿔 비교할 수 있습니다. 운행·대기 시간은 예상값입니다.');

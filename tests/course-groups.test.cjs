@@ -3,3 +3,13 @@ const course={title:'문제해결과 알고리즘',term:'2026-2',starts_on:'2026
 const rows=[{...course,id:'m1',weekday:2,room:'111'},{...course,title:'문제해결과알고리즘',id:'m2',weekday:4,room:'203'},{...course,term:'2027-1',id:'m3'}];
 const groups=groupCourses(rows);assert.equal(groups.length,2);assert.equal(groups[0].meetings.length,2);assert.deepEqual(groups[0].indices,[0,1]);assert.deepEqual(groups[0].meetings.map(row=>row.room),['111','203']);assert.equal(rows[0].title,course.title);
 console.log('PASS: one subject groups recurring meetings, preserves distinct rooms/IDs and separates semesters');
+const {updateMeeting,withOverrides}=require('../lib/course-groups.cjs');
+const meetings=[{...course,weekday:1,room:'101',location_override:false},{...course,weekday:3,room:'101',location_override:false},{...course,weekday:5,room:'201',location_override:true}];
+const changed=updateMeeting(meetings,0,{title:'새 과목',room:'102',weekday:2});
+assert.deepEqual(changed.map(r=>r.title),['새 과목','새 과목','새 과목']);
+assert.deepEqual(changed.map(r=>r.room),['102','102','201']);
+assert.deepEqual(changed.map(r=>r.weekday),[2,3,5]);
+assert.equal(withOverrides(rows.slice(0,2))[1].location_override,true);
+assert.equal(updateMeeting(changed,2,{location_override:false})[2].room,'102');
+assert.deepEqual(meetings.map(r=>r.room),['101','101','201']);
+console.log('PASS: shared course edits, legacy/explicit room overrides, rejoin shared location and immutable time slots');

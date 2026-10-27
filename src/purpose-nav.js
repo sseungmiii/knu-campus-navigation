@@ -1,8 +1,11 @@
-function showPurpose(name, focus = false) {
+function showPurpose(name, focus = false, notify = true) {
   const tab = document.getElementById(`tab-${name}`);
   if (!tab) return;
   document.body.classList.add('panel-open');
-  if(name==='route'&&window.parent!==window)window.parent.postMessage({type:'knu:shell-map'},location.origin);
+  document.body.classList.toggle('school-sheet',name==='facilities');
+  if(name!=='facilities'&&typeof leaveSchoolFacilities==='function')leaveSchoolFacilities();
+  if(name!=='facilities')document.body.classList.remove('sheet-collapsed');
+  if(notify&&name==='route'&&window.parent!==window)window.parent.postMessage({type:'knu:shell-map'},location.origin);
   document.querySelectorAll('[data-view]').forEach(button => {
     const active = button === tab;
     button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;

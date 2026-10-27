@@ -1,22 +1,26 @@
 class RoutePacemaker {
   constructor(view, update) {
-    this.view = view; this.update = update; this.watchId = null; this.frame = null; this.route = null; this.speed = 4.8 / 3.6; this.mode = 'idle';
+    this.view = view; this.update = update; this.watchId = null; this.frame = null; this.route = null; this.speed = 4.8 / 3.6; this.mode = 'idle'; this.rate=12;this.base=0;
   }
-  setRoute(route) { this.stop(); this.route = route; this.metrics = makeRouteMetrics(route.points); this.userDistance = 0; }
+  setRoute(route) { this.stop(); this.route = route; this.metrics = makeRouteMetrics(route.points); this.userDistance = 0; this.base=0; }
   marker(point, kind) { return this.view.marker(point, `<div class="nav-marker ${kind}">${kind === 'ghost' ? '🏃' : '●'}<span>${kind === 'ghost' ? '목표 페이스' : '내 위치'}</span></div>`); }
   setSpeed(kmh) {
     if (this.mode === 'live' || this.mode === 'preview') {
       this.base = this.targetDistance(); this.started = performance.now();
     }
     this.speed = kmh / 3.6;
+    this.drawPreview();
   }
-  targetDistance() { return Math.min(this.metrics.total, this.base + (performance.now() - this.started) / 1000 * this.speed * (this.mode === 'preview' ? 12 : 1)); }
-  preview() {
-    if (!this.route) return;
-    this.stop(); this.mode = 'preview'; this.base = 0; this.started = performance.now();
-    this.ghost = this.marker(this.metrics.points[0], 'ghost');
-    this.tick();
+  targetDistance() { return Math.min(this.metrics.total, this.base + (performance.now() - this.started) / 1000 * this.speed * (this.mode === 'preview' ? this.rate : 1)); }
+  setRate(value){if(![1,2,4,8,12,20].includes(Number(value)))return;if(this.mode==='preview'){this.base=this.targetDistance();this.started=performance.now();}this.rate=Number(value);this.drawPreview();}
+  drawPreview(){if(!this.route||!['preview','paused','stopped','preview-complete'].includes(this.mode))return;const distance=this.mode==='preview'?this.targetDistance():this.base;
+    if(!this.ghost)this.ghost=this.marker(pointAtMeters(this.metrics,distance),'ghost');else this.ghost.setLatLng(pointAtMeters(this.metrics,distance));
+    this.update({mode:this.mode,progress:distance/this.metrics.total*100,remaining:this.metrics.total-distance,elapsed:distance/this.speed,message:`경로 미리보기 · ${this.rate}배속 · 실제 위치 안내 아님`});
   }
+  preview(){if(!this.route)return;const resume=['paused','stopped'].includes(this.mode)?this.base:0;this.stop({preserve:true});this.base=resume;this.mode='preview';this.started=performance.now();this.drawPreview();this.tick();}
+  pause(){if(this.mode!=='preview')return;this.base=this.targetDistance();if(this.frame!==null)cancelAnimationFrame(this.frame);this.frame=null;this.mode='paused';this.drawPreview();}
+  seek(percent){if(!this.route||['waiting','live'].includes(this.mode))return;const running=this.mode==='preview';this.base=this.metrics.total*Math.max(0,Math.min(100,Number(percent)||0))/100;this.started=performance.now();if(!running)this.mode='paused';this.drawPreview();}
+  reset(){if(!this.route)return;this.stop({preserve:true});this.base=0;this.mode='paused';this.drawPreview();}
   startLive() {
     if (!this.route || this.route.sample || this.route.mode !== 'walk') { this.update({message: '실제 도보 경로를 먼저 검색해주세요.'}); return; }
     if (!navigator.geolocation || !window.isSecureContext) { this.update({message: '위치 안내는 HTTPS와 위치 기능이 지원되는 기기에서 이용해주세요.'}); return; }
@@ -43,7 +47,7 @@ class RoutePacemaker {
       }
     }, error => {
       if (session !== this.session) return;
-      this.stop(); this.update({mode: 'idle', message: error.code === 1 ? '위치 권한이 거부되었습니다. 권한을 허용한 뒤 다시 시작해주세요.' : '현재 위치를 받지 못했습니다. 잠시 후 다시 시도해주세요.'});
+      this.stop(); this.update({mode: this.mode, message: error.code === 1 ? '위치 권한이 거부되었습니다. 권한을 허용한 뒤 다시 시작해주세요.' : '현재 위치를 받지 못했습니다. 잠시 후 다시 시도해주세요.'});
     }, {enableHighAccuracy: true, maximumAge: 0, timeout: 15000});
   }
   tick(session = this.session) {
@@ -56,21 +60,22 @@ class RoutePacemaker {
       const progress = preview ? target : this.userDistance;
       const remaining = Math.max(0, this.metrics.total - progress);
       const gap = target - this.userDistance;
-      const message = preview ? '경로 미리보기 · 12배속 (실제 위치 안내 아님)' : !fresh ? 'GPS 신호가 오래됐습니다. 위치 갱신을 기다립니다.' : this.offRoute ? '경로 이탈 · 현재 위치로 다시 검색해주세요.' : `${Math.abs(Math.round(gap))}m ${gap > 5 ? '목표보다 뒤에 있어요' : gap < -5 ? '목표보다 앞서 있어요' : '목표 페이스에 맞춰 걷고 있어요'}`;
-      this.update({mode: this.mode, message, remaining: (fresh && !this.offRoute) || preview ? remaining : null, progress: Math.min(100, progress / this.metrics.total * 100), gap: fresh && !this.offRoute ? gap : null});
+      const message = preview ? `경로 미리보기 · ${this.rate}배속 (실제 위치 안내 아님)` : !fresh ? 'GPS 신호가 오래됐습니다. 위치 갱신을 기다립니다.' : this.offRoute ? '경로 이탈 · 현재 위치로 다시 검색해주세요.' : `${Math.abs(Math.round(gap))}m ${gap > 5 ? '목표보다 뒤에 있어요' : gap < -5 ? '목표보다 앞서 있어요' : '목표 페이스에 맞춰 걷고 있어요'}`;
+      this.update({mode: this.mode, message, remaining: (fresh && !this.offRoute) || preview ? remaining : null, progress: Math.min(100, progress / this.metrics.total * 100), elapsed:progress/this.speed, gap: fresh && !this.offRoute ? gap : null});
     }
     if (this.mode === 'preview' && target >= this.metrics.total) {
-      this.mode = 'preview-complete'; this.update({mode: this.mode, remaining: 0, progress: 100, message: '경로 미리보기 완료. 실제 안내는 도보 안내 시작을 눌러주세요.'}); return;
+      this.base=this.metrics.total;this.mode = 'preview-complete'; this.update({mode: this.mode, remaining: 0, progress: 100, elapsed:this.metrics.total/this.speed, message: '경로 미리보기 완료. 실제 안내는 도보 안내 시작을 눌러주세요.'}); return;
     }
     this.frame = requestAnimationFrame(() => this.tick(session));
   }
-  stop() {
+  stop({preserve=false}={}) {
+    if(this.mode==='preview'||this.mode==='live')this.base=this.targetDistance();
     this.session = (this.session || 0) + 1;
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.watchId = this.frame = null;
-    this.ghost?.remove(); this.user?.remove(); this.ghost = this.user = null;
-    this.mode = 'idle'; this.lastFix = null; this.lastDraw = null; this.offRoute = false;
-    this.update({mode: 'idle', message: '도보 안내를 시작하면 목표 페이스와 내 위치를 비교합니다.'});
+    if(!preserve){this.ghost?.remove();this.user?.remove();this.ghost=this.user=null;this.base=0;}
+    this.mode = preserve?'stopped':'idle'; this.lastFix = null; this.lastDraw = null; this.offRoute = false;
+    if(preserve)this.drawPreview();else this.update({mode:'idle',message:'도보 안내를 시작하면 목표 페이스와 내 위치를 비교합니다.'});
   }
 }
