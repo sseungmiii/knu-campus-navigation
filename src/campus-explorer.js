@@ -9,7 +9,7 @@ const campusDining = [
 let campusFacilities=[...campusDining],campusPins=[],campusFilter='all',campusSearchGeneration=0,campusSelectedPin=null;
 const campusCategoryNames={meal:'학식당',FD6:'식당',CE7:'카페',CS2:'편의점'},campusIcons={meal:'♧',FD6:'♧',CE7:'☕',CS2:'▣'};
 let facilityScope='inside',facilityCategory='all',outsideFacilities=[],facilityLoadGeneration=0,schoolTab=null,facilityNote='';
-function leaveSchoolFacilities(){if(!schoolTab)return;schoolTab=null;facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());}
+function leaveSchoolFacilities(){if(!schoolTab)return;schoolTab=null;document.body.classList.remove('outside-facilities');facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());}
 function renderSchoolFacilities(){
   const rows=(facilityScope==='inside'?campusFacilities:outsideFacilities).filter(row=>facilityCategory==='all'||row.category===facilityCategory),box=$('schoolFacilityResults');box.replaceChildren();
   document.querySelectorAll('[data-school-category]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.schoolCategory===facilityCategory)));
@@ -31,25 +31,17 @@ async function querySchoolArea(){
 }
 async function showShellTab(tab){
  $('campusPlaceCard').hidden=true;$('campusSearchResults').hidden=true;campusSelectedPin?.remove();
- if(!['inside','outside'].includes(tab)){schoolTab=null;facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());document.body.classList.remove('school-sheet','sheet-collapsed');if(tab==='map'){document.body.classList.remove('panel-open');map.refresh?.();}else if(tab==='route-nearby')showPurpose('nearby');return;}
+ if(!['inside','outside'].includes(tab)){schoolTab=null;document.body.classList.remove('outside-facilities');facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());document.body.classList.remove('school-sheet','sheet-collapsed','resizable-sheet','sheet-minimized');if(tab==='map'){document.body.classList.remove('panel-open');map.refresh?.();}else if(tab==='route-nearby')showPurpose('nearby');return;}
+ document.body.classList.toggle('outside-facilities',tab==='outside');
  const entering=schoolTab!==tab;schoolTab=tab;facilityScope=tab;
  if(entering){facilityCategory='all';facilityNote='';document.body.classList.remove('sheet-collapsed');$('schoolSheetHandle').setAttribute('aria-expanded','true');$('schoolSheetHandle').setAttribute('aria-label','학교 패널 접기');facilityLoadGeneration++;if(typeof facilityLayers!=='undefined')facilityLayers.splice(0).forEach(p=>p.remove());}
  $('schoolFacilityTitle').textContent=tab==='inside'?'학교 내부 시설':'학교 주변 시설';
  $('schoolFacilityDescription').textContent=tab==='inside'?'교내 주소로 확인된 시설입니다. 범주를 선택하면 목록과 핀이 함께 바뀝니다.':'패널 위 실제 보이는 지도 영역에서 검색합니다. 지도를 옮긴 뒤 재검색하세요.';
- $('refreshSchoolFacilities').textContent=tab==='outside'?'이 지도에서 재검색':'교내 시설 다시 조회';
+ $('refreshSchoolFacilities').hidden=tab==='outside';$('refreshSchoolFacilities').textContent='교내 시설 다시 조회';
  showPurpose('facilities');renderSchoolFacilities();
  if(entering){map.schoolHome?.(tab);if(tab==='outside')await querySchoolArea();}
 }
-function initSchoolSheet(){
- const handle=$('schoolSheetHandle'),panel=document.querySelector('.route-panel');let start=null,moved=false;
- const settle=collapsed=>{document.body.classList.toggle('sheet-collapsed',collapsed);handle.setAttribute('aria-expanded',String(!collapsed));handle.setAttribute('aria-label',collapsed?'학교 패널 펼치기':'학교 패널 접기');panel.style.transform='';if(collapsed)panel.scrollTop=0;};
- handle.onclick=()=>{if(moved){moved=false;return;}settle(!document.body.classList.contains('sheet-collapsed'));};
- handle.onpointerdown=event=>{if(event.button!==0)return;start={y:event.clientY,base:document.body.classList.contains('sheet-collapsed')?panel.offsetHeight-84:0};moved=false;handle.setPointerCapture(event.pointerId);};
- handle.onpointermove=event=>{if(!start)return;const delta=event.clientY-start.y;if(Math.abs(delta)>5)moved=true;panel.style.transform=`translateY(${Math.max(0,Math.min(panel.offsetHeight-84,start.base+delta))}px)`;};
- handle.onpointerup=event=>{if(!start)return;const delta=event.clientY-start.y;if(moved)settle(delta>30?true:delta< -30?false:start.base>0);else panel.style.transform='';start=null;};
- handle.onpointercancel=()=>{start=null;panel.style.transform='';};
- $('schoolReturn').onclick=()=>map.schoolHome?.(facilityScope);
-}
+function initSchoolSheet(){initPanelSheet();$('schoolReturn').onclick=()=>map.schoolHome?.(facilityScope);}
 function campusDestination(place,kind='end') {
   showPurpose('route');selectPlace(kind,{...place,name:place.building||place.name});
   $('campusPlaceCard').hidden=true;map.panTo(place.coords);

@@ -2,6 +2,10 @@ function showPurpose(name, focus = false, notify = true) {
   const tab = document.getElementById(`tab-${name}`);
   if (!tab) return;
   document.body.classList.add('panel-open');
+  document.body.classList.toggle('resizable-sheet',['route','facilities'].includes(name));
+  document.body.classList.remove('sheet-collapsed','sheet-minimized');
+  if(['route','facilities'].includes(name))sheetController?.open(name);
+  else document.body.classList.remove('sheet-tall');
   document.body.classList.toggle('school-sheet',name==='facilities');
   if(name!=='facilities'&&typeof leaveSchoolFacilities==='function')leaveSchoolFacilities();
   if(name!=='facilities')document.body.classList.remove('sheet-collapsed');

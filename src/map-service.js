@@ -2,7 +2,7 @@ function visibleMapRect(){
  const container=document.getElementById('map'),bounds=container.getBoundingClientRect();
  let top=0,left=0,right=bounds.width,bottom=bounds.height;
  for(const selector of ['.campus-topbar','.campus-shortcuts','.route-panel']){
-  const el=document.querySelector(selector);if(!el||!el.getClientRects().length)continue;const rect=el.getBoundingClientRect();
+  const el=document.querySelector(selector);if(!el||!el.getClientRects().length||(typeof getComputedStyle==='function'&&getComputedStyle(el).visibility==='hidden'))continue;const rect=el.getBoundingClientRect();
   if(selector!=='.route-panel'){top=Math.max(top,rect.bottom-bounds.top+10);continue;}
   if(rect.width>bounds.width*.7)bottom=Math.min(bottom,rect.top-bounds.top-8);else left=Math.max(left,rect.right-bounds.left+8);
  }

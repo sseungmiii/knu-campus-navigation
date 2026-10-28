@@ -198,7 +198,8 @@ window.addEventListener('message', async event => {
     if(event.data.type==='knu:class-mode'){
       if(!['walk','transit'].includes(event.data.mode))return;
       $('transportMode').value=event.data.mode;$('walkOptions').hidden=event.data.mode==='transit';$('routeMode').disabled=event.data.mode==='transit';
-      map.refresh?.();showPurpose('route',false,false);
+      if(typeof showRouteMap==='function')showRouteMap();else map.refresh?.();
+      if(selectedRoute?.mode===event.data.mode){notifyClassRoute();return;}
     }
     if(places.start&&places.end)await findRoute({preventDefault(){}});return;
   }

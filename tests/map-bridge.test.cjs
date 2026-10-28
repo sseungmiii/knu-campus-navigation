@@ -23,5 +23,9 @@ console.log('PASS: timetable destination handoff, iframe source/origin validatio
   vm.runInContext("getPosition=async()=>{throw new Error('위치 거부');};",context);
   await send({type:'knu:destination',classId:'class-b',place,useCurrentLocation:true});assert.equal(elements.get('startQuery').value,'변경한 출발지');assert.equal(vm.runInContext('routeQueries',context),2,'Existing chosen origin survives a new class without requesting GPS');
   await send({type:'knu:class-location',classId:'class-b',requestId:9});assert.match(elements.get('routeMessage').textContent,/기존 출발지는 유지/);assert.equal(elements.get('startQuery').value,'변경한 출발지');
+  vm.runInContext("let fullMapOpened=0;showRouteMap=()=>{fullMapOpened++;};selectedRoute={mode:'walk',duration:600};",context);
+  await send({type:'knu:class-mode',classId:'class-b',requestId:10,mode:'walk'});
+  assert.equal(vm.runInContext('fullMapOpened',context),1);assert.equal(vm.runInContext('routeQueries',context),2,'Opening the same result must not fetch/reset the route');
+  assert.equal(posted.findLast(message=>message.type==='knu:class-route').requestId,10);
   console.log('PASS: favorite origin/mode restore, course-specific route message and GPS denial without stale-origin routing');
 })().catch(error=>{console.error(error);process.exit(1);});
