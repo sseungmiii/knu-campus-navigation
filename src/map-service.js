@@ -52,7 +52,7 @@ function createKakaoMap() {
   const view = {
     provider: 'kakao',
     refresh:()=>{const center=native.getCenter();native.relayout();if(fittedPath)fit(fittedPath);else native.setCenter(center);},
-    schoolHome:scope=>{fittedPath=null;const rect=visibleMapRect(),bounds=new kakao.maps.LatLngBounds();const points=scope==='outside'?[[35.882,128.603],[35.896,128.622]]:[[35.8847,128.607],[35.8933,128.618]];points.forEach(p=>bounds.extend(coord(p)));native.setBounds(bounds,rect.top+15,rect.width-rect.right+15,rect.height-rect.bottom+15,rect.left+15);},
+    schoolHome:scope=>{fittedPath=null;const r=visibleMapRect();native.setLevel(scope==='outside'?5:4);native.setCenter(coord([35.889,128.6125]));const projection=native.getProjection();native.setCenter(projection.coordsFromContainerPoint(new kakao.maps.Point(r.width-(r.left+r.right)/2,r.height-(r.top+r.bottom)/2)));},
     visibleBounds:()=>{const r=visibleMapRect(),projection=native.getProjection(),sw=projection.coordsFromContainerPoint(new kakao.maps.Point(r.left,r.bottom)),ne=projection.coordsFromContainerPoint(new kakao.maps.Point(r.right,r.top));return {south:sw.getLat(),west:sw.getLng(),north:ne.getLat(),east:ne.getLng()};},
     onMove:handler=>kakao.maps.event.addListener(native,'idle',handler),
     campusHome: () => {fittedPath=null;native.setLevel(4);native.setCenter(coord([35.889,128.612]));},
