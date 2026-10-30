@@ -56,11 +56,11 @@ async function search(kind) {
   if (!query) { message('검색할 장소를 입력해주세요.', true); return; }
   container.textContent = '검색 중…';
   try {
-    let results;
-    if (hasBackend) {
+    let results=typeof CampusLocal!=='undefined'&&typeof readCampusLocal==='function'?CampusLocal.search(readCampusLocal(),query):[];
+    if (!results.length&&hasBackend) {
       const response = await fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}`, {signal: AbortSignal.timeout(15000)});
       const data = await response.json(); if (!response.ok) throw new Error(data.error || '검색에 실패했습니다.'); results = data.places;
-    } else results = await map.search(query);
+    } else if(!results.length) results = await map.search(query);
     if (generation !== searchGenerations[kind]) return;
     container.replaceChildren();
     if (!results.length) { container.textContent = '검색 결과가 없습니다. 다른 장소명을 입력해주세요.'; return; }

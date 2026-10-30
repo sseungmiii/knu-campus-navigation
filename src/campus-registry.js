@@ -1,5 +1,5 @@
 (function(root){
- const categories={meal:'학식당',FD6:'식당',CE7:'카페',CS2:'편의점',vending:'자판기',water:'정수기',lounge:'라운지',atm:'ATM',study:'스터디룸',smoking:'흡연부스',bin:'쓰레기통',printer:'프린터',elevator:'엘리베이터',room:'강의실',building:'건물'};
+ const categories={meal:'학식당',FD6:'식당',CE7:'카페',CS2:'편의점',vending:'자판기',water:'정수기',lounge:'라운지',atm:'ATM',study:'스터디룸',smoking:'흡연부스',bin:'쓰레기통',printer:'프린터',elevator:'엘리베이터',toilet:'화장실',stairs:'계단',entrance:'출입구',room:'강의실',building:'건물'};
  const norm=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s\-_·]/g,'');
  const validPoint=value=>Array.isArray(value)&&value.length===2&&value.every(Number.isFinite)&&value[0]>=35.88&&value[0]<=35.90&&value[1]>=128.60&&value[1]<=128.63;
  function published(catalog){return [...(catalog.buildings||[]),...(catalog.facilities||[])].filter(row=>row.status==='published'&&validPoint(row.coords)&&typeof row.name==='string'&&row.name.trim());}

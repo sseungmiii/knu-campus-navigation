@@ -51,6 +51,7 @@ function createKakaoMap() {
   }
   const view = {
     provider: 'kakao',
+    onClick:handler=>{const receive=event=>handler([event.latLng.getLat(),event.latLng.getLng()]);kakao.maps.event.addListener(native,'click',receive);return ()=>kakao.maps.event.removeListener(native,'click',receive);},
     project:point=>{const p=native.getProjection().containerPointFromCoords(coord(point));return {x:p.x,y:p.y};},
     refresh:()=>{const center=native.getCenter();native.relayout();if(fittedPath)fit(fittedPath);else native.setCenter(center);},
     schoolHome:scope=>{fittedPath=null;const r=visibleMapRect();native.setLevel(scope==='outside'?5:4);native.setCenter(coord([35.889,128.6125]));const projection=native.getProjection();native.setCenter(projection.coordsFromContainerPoint(new kakao.maps.Point(r.width-(r.left+r.right)/2,r.height-(r.top+r.bottom)/2)));},
@@ -119,6 +120,7 @@ function createLeafletMap() {
     marker: (point, html) => wrap(L.marker(point, {icon: L.divIcon({html, className: 'campus-marker', iconSize: [0, 0]})}).addTo(native)),
     fitPath: points => { fittedPath = points; native.fitBounds(points, {padding: [45, 55]}); },
     project:point=>{const p=native.latLngToContainerPoint(point);return {x:p.x,y:p.y};},
+    onClick:handler=>{const receive=event=>handler([event.latlng.lat,event.latlng.lng]);native.on('click',receive);return ()=>native.off('click',receive);},
     onMove:handler=>native.on('moveend zoomend',handler),
     search: () => Promise.reject(new Error('카카오 연결을 확인한 뒤 장소 검색을 이용해주세요.'))
   };
