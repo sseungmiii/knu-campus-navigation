@@ -24,7 +24,7 @@ const searchGenerations = {start: 0, end: 0};
 const $ = id => document.getElementById(id);
 const apiBase = ROUTING_API_BASE_URL.replace(/\/$/, '');
 const localBackend = ['127.0.0.1', 'localhost'].includes(location.hostname);
-const hasBackend = Boolean(apiBase) || localBackend || location.hostname === 'knu-campus-navigation.vercel.app';
+const hasBackend = Boolean(apiBase) || localBackend || ['knu-campus-navigation.vercel.app','knu-campus-navigation-test.vercel.app'].includes(location.hostname);
 function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); if(activeClassId)window.parent.postMessage({type:'knu:trip-status',classId:activeClassId,requestId:activeRequestId,status:text,error},location.origin); }
 function classRouteSignature(route) {return (route.steps||[]).filter(step=>step.type!=='WALKING').map(step=>`${step.type}:${(step.vehicles||[]).join('/')}:${step.boardingStop?.id||step.stops?.[0]||''}`).join('|').slice(0,500);}
 function notifyClassRoute() {
