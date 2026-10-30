@@ -24,7 +24,7 @@ const searchGenerations = {start: 0, end: 0};
 const $ = id => document.getElementById(id);
 const apiBase = ROUTING_API_BASE_URL.replace(/\/$/, '');
 const localBackend = ['127.0.0.1', 'localhost'].includes(location.hostname);
-const hasBackend = Boolean(apiBase) || localBackend || location.hostname === 'knu-campus-navigation.vercel.app';
+const hasBackend = Boolean(apiBase) || localBackend || ['knu-campus-navigation.vercel.app','knu-campus-navigation-test.vercel.app'].includes(location.hostname);
 function message(text, error = false) { $('routeMessage').textContent = text; $('routeMessage').classList.toggle('error', error); if(activeClassId)window.parent.postMessage({type:'knu:trip-status',classId:activeClassId,requestId:activeRequestId,status:text,error},location.origin); }
 function classRouteSignature(route) {return (route.steps||[]).filter(step=>step.type!=='WALKING').map(step=>`${step.type}:${(step.vehicles||[]).join('/')}:${step.boardingStop?.id||step.stops?.[0]||''}`).join('|').slice(0,500);}
 function notifyClassRoute() {
@@ -56,11 +56,11 @@ async function search(kind) {
   if (!query) { message('검색할 장소를 입력해주세요.', true); return; }
   container.textContent = '검색 중…';
   try {
-    let results;
-    if (hasBackend) {
+    let results=typeof CampusLocal!=='undefined'&&typeof readCampusLocal==='function'?CampusLocal.search(readCampusLocal(),query):[];
+    if (!results.length&&hasBackend) {
       const response = await fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}`, {signal: AbortSignal.timeout(15000)});
       const data = await response.json(); if (!response.ok) throw new Error(data.error || '검색에 실패했습니다.'); results = data.places;
-    } else results = await map.search(query);
+    } else if(!results.length) results = await map.search(query);
     if (generation !== searchGenerations[kind]) return;
     container.replaceChildren();
     if (!results.length) { container.textContent = '검색 결과가 없습니다. 다른 장소명을 입력해주세요.'; return; }

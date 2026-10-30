@@ -12,9 +12,10 @@ function json(res, status, data) {
 }
 async function handleApi(kind, req, res, env = process.env, services = {fetchWalkingRoute, searchPlaces, ...mobility, meals,weather}) {
   const origin = req.headers.origin;
+  const configuredOrigins=new Set(String(env.KNU_ALLOWED_ORIGINS||'').split(',').map(value=>value.trim()).filter(value=>{try{const u=new URL(value);return u.protocol==='https:'&&u.origin===value;}catch{return false;}}));
   res.setHeader('Vary', 'Origin');
   const localOrigin = env.VERCEL !== '1' && ['127.0.0.1:5174', 'localhost:5174'].includes(req.headers.host) && origin === `http://${req.headers.host}`;
-  if (origin && !origins.has(origin) && !localOrigin) return json(res, 403, {error: '허용되지 않은 요청입니다.'});
+  if (origin && !origins.has(origin) && !configuredOrigins.has(origin) && !localOrigin) return json(res, 403, {error: '허용되지 않은 요청입니다.'});
   if (origin) res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

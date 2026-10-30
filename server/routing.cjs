@@ -51,6 +51,8 @@ async function fetchWalkingRoute(input, env, request = fetch) {
 }
 async function searchPlaces(keyword, env, request = fetch) {
   if (typeof keyword !== 'string' || !keyword.trim() || keyword.length > 100) throw new RouteError(400, 'INVALID_INPUT', '검색어를 입력해주세요.');
+  const local=require('./campus-registry.cjs').localSearch(keyword);
+  if(local.length)return {places:local,source:'크누패스 교내 등록 장소'};
   if (!env.KAKAO_REST_API_KEY) throw new RouteError(503, 'NOT_CONFIGURED', '장소 검색 연결을 준비 중입니다.');
   const query = new URLSearchParams({query: keyword.trim(), x: '128.6125', y: '35.89', sort: 'accuracy', size: '10'});
   let response;

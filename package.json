@@ -13,7 +13,7 @@
     "test": "node tests/run.cjs"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -22,6 +22,7 @@
     "@tesseract.js-data/kor": "1.0.0",
     "date-holidays": "3.37.0",
     "fast-xml-parser": "^5.11.2",
+    "iron-session": "9.0.1",
     "next": "16.4.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

@@ -10,7 +10,8 @@ DB 마이그레이션과 즉시 가입 설정이 필요합니다. 아이디·비
 
 지도 날씨 카드와 수업 이동 시간대의 기상청 예보를 제공합니다. 서버 전용 KMA_API_KEY와 자료 범위는 [날씨 설정](docs/weather-setup.md)을 참고하세요.
 
-Node.js 22 이상에서 `npm ci`로 의존성을 설치합니다.
+Node.js 22.13 이상에서 `npm ci`로 의존성을 설치합니다.
+관리자 계정 설정과 테스트 후 운영 반영 방법은 [관리자·배포 안내](docs/admin-and-release.md)를 참고하세요.
 
 1. `.env.example`을 `.env`로 복사하고 `KAKAO_REST_API_KEY`를 입력합니다. 이 파일은 Git에서 제외됩니다. 프론트엔드에는 REST 키를 넣지 않습니다.
    `.env.local`에 `SUPABASE_URL`과 `SUPABASE_PUBLISHABLE_KEY`를 등록합니다. Secret Key는 필요하지 않습니다.
