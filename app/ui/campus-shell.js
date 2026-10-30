@@ -198,6 +198,7 @@ export default function CampusShell({supabaseConfig,testing=false}) {
       <div className="next-class"><strong>{next ? `다음 수업 · ${next.title}` : '수업까지, 한 걸음 여유롭게.'}</strong><span>{next ? `${time(next.start_minute)} · ${next.place_name}${next.room?' '+next.room+'호':''}` : '사진으로 시간표를 가져오고, 내 수업까지 바로 출발하세요.'}</span></div>
       {next && <button disabled={!ready} onClick={() => navigate(next)}>수업으로 길찾기</button>}
       <button className="accent" onClick={() => selectShellTab('schedule')}>{user ? '내 시간표' : '로그인 · 회원가입'}</button>
+      <a className="admin-entry-link" href="/admin/login">관리자</a>
     </header>
     {!open&&shellTab==='map'&&trip&&<section className="map-class-summary" aria-label="수업 이동 핵심 정보"><button type="button" onClick={()=>selectShellTab('schedule')}><strong>{trip.row.title}</strong><span>{trip.route?new Date(classTrip.departureAt(trip.classStart,trip.route)).toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false})+'까지 출발 · '+Math.ceil(trip.route.duration/60)+'분 이동':time(trip.row.start_minute)+' 수업 · 출발지를 선택해주세요'}</span></button><button type="button" aria-label="수업 안내 접기" onClick={()=>setTrip(null)}>×</button></section>}
     <iframe ref={frame} className="campus-map" src="/map/index.html?shell=1" style={{visibility:open?'hidden':'visible'}} aria-hidden={open} inert={open} title="카카오 캠퍼스 도보 길찾기" onLoad={() => {setReady(false); frame.current?.contentWindow?.postMessage({type:'knu:ping'}, location.origin);}} />

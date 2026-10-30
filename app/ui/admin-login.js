@@ -1,0 +1,7 @@
+'use client';
+import {useState} from 'react';
+export default function AdminLogin({configured}){
+  const [busy,setBusy]=useState(false),[message,setMessage]=useState('');
+  async function login(event){event.preventDefault();const form=event.currentTarget,values=new FormData(form);setBusy(true);setMessage('');try{const response=await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:values.get('username'),password:values.get('password')})});const data=await response.json();form.elements.password.value='';if(!response.ok)throw Error(data.error);location.assign('/campus-lab');}catch(error){setMessage(error.message||'로그인하지 못했습니다.');}finally{setBusy(false);}}
+  return <main className="facility-workbench admin-login"><a href="/">← 지도로</a><span className="eyebrow">CAMPUS ADMIN</span><h1>관리자 로그인</h1><p>시설 등록·수정·삭제는 관리자 전용 기능입니다. 일반 회원의 시간표 로그인과 별도로 이용합니다.</p>{configured?<form className="schedule-form" onSubmit={login}><fieldset disabled={busy}><label>관리자 아이디<input name="username" required autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={40}/></label><label>비밀번호<input name="password" type="password" required autoComplete="current-password" maxLength={256}/></label><button className="accent">{busy?'확인 중…':'관리자 로그인'}</button></fieldset></form>:<aside>관리자 계정이 아직 설정되지 않았습니다. <a href="/admin/setup">관리자 계정 설정 방법</a>을 확인해주세요.</aside>}<p role="status">{message}</p><a href="/admin/setup">관리자 계정 설정 안내</a></main>;
+}

@@ -1,5 +1,6 @@
-import {notFound} from 'next/navigation';
-import environment from '../../lib/environment.cjs';
+import {redirect} from 'next/navigation';
+import {readAdminSession} from '../../lib/admin-session';
 import catalog from '../../data/campus-registry.json';
 import FacilityWorkbench from '../ui/facility-workbench';
-export default function CampusLab(){if(!environment.isTestingEnvironment())notFound();return <FacilityWorkbench buildings={catalog.buildings}/>;}
+export const metadata={robots:{index:false,follow:false}};
+export default async function CampusLab(){const auth=await readAdminSession();if(!auth.isAdmin)redirect('/admin/login');return <FacilityWorkbench buildings={catalog.buildings}/>;}

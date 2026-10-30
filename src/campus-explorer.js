@@ -61,7 +61,7 @@ function openCampusPlace(place) {
   for(const [kind,label] of [['start','출발'],['end','도착 · 길찾기']]){const button=textNode('button',label,kind==='end'?'primary':'secondary');button.type='button';button.onclick=()=>campusDestination(place,kind);actions.append(button);}
   if(place.category==='meal'){const button=textNode('button','오늘 식단 보기','secondary');button.onclick=()=>{showPurpose('meals');$('loadMeals').click();box.hidden=true;};actions.append(button);}
   box.append(actions);
-  if(place.source==='manual-local'){const manage=textNode('a','시설 정보 수정·삭제','building-facility-link');manage.href='/campus-lab';manage.target='_top';box.append(manage);}
+  if(place.source==='manual-local'&&typeof campusAdmin!=='undefined'&&campusAdmin){const manage=textNode('a','시설 정보 수정·삭제','building-facility-link');manage.href='/campus-lab';manage.target='_top';box.append(manage);}
 }
 let campusPinRows=null;
 function renderCampusPins(rows) {
