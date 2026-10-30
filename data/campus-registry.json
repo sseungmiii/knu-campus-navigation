@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-30",
+  "buildings": [
+    {"id":"knu-it1","name":"경북대학교 IT대학1호관","aliases":["IT1","IT 1호관","IT-1","공대10호관"],"category":"building","coords":[35.8874939272576,128.612752066575],"status":"published","source":"기존 카카오 장소 검색 13490896 / 2026-10-30","hours":null,"floors":[],"notes":"건물 위치만 확인했습니다. 출입구·실내 도면은 아직 등록하지 않았습니다."},
+    {"id":"knu-info","name":"경북대학교 종합정보센터","aliases":["정보센터"],"category":"building","coords":[35.8922990401853,128.613270366919],"status":"published","source":"기존 검증 학식 건물 좌표 / 2026-10-20","hours":null,"floors":[]},
+    {"id":"knu-welfare","name":"경북대학교 복지관","aliases":["복지관"],"category":"building","coords":[35.88902007473884,128.61452386276625],"status":"published","source":"기존 검증 학식 건물 좌표 / 2026-10-20","hours":null,"floors":[]},
+    {"id":"knu-gp","name":"경북대학교 글로벌플라자","aliases":["GP","글로벌플라자"],"category":"building","coords":[35.8918682645968,128.611259363988],"status":"published","source":"기존 검증 학식 건물 좌표 / 2026-10-20","hours":null,"floors":[]},
+    {"id":"knu-eng12","name":"경북대학교 공대12호관","aliases":["공대12호관"],"category":"building","coords":[35.8884795795739,128.609945976963],"status":"published","source":"기존 검증 학식 건물 좌표 / 2026-10-20","hours":null,"floors":[]}
+  ],
+  "facilities": [],
+  "floors": [],
+  "walkways": []
+}

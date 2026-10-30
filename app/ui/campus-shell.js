@@ -26,7 +26,7 @@ function TimePicker({label,value,onChange}) {
     <select aria-label={`${label} 분`} value={minute} onChange={event=>onChange(`${hour}:${event.target.value}`)}>{classEditor.MINUTES.map(item=><option key={item} value={item}>{item}분</option>)}</select>
   </div></div>;
 }
-export default function CampusShell({supabaseConfig}) {
+export default function CampusShell({supabaseConfig,testing=false}) {
   const supabase = useMemo(() => supabaseConfig ? createClient(supabaseConfig) : null, [supabaseConfig]);
   const frame = useRef(null), dialog = useRef(null), editorSection=useRef(null), searchGeneration = useRef(0), userRef = useRef(null);
   const [open, setOpen] = useState(false), [ready, setReady] = useState(false), [user, setUser] = useState(null);
@@ -212,7 +212,7 @@ export default function CampusShell({supabaseConfig}) {
       <button disabled={busy||(!trip.route&&!trip.row.favorite_route)} onClick={()=>mutate('PUT',{id:trip.row.id,favorite_route:trip.row.favorite_route?null:trip.route})}>{trip.row.favorite_route?'★ 즐겨찾기 해제':'☆ 이 경로 즐겨찾기'}</button><button aria-label="수업 이동 안내 닫기" onClick={()=>setTrip(null)}>닫기</button>
     </div></section>}
       <p role="status" className="schedule-status">{status}</p>
-      {!supabase ? <p>시간표 서버 연결을 준비 중입니다. 지도 길찾기는 이용할 수 있습니다.</p> : authLoading ? <p>로그인 확인 중…</p> : !user ? <>
+      {!supabase ? <p>{testing?'테스트용 시간표 DB가 아직 연결되지 않았습니다. 운영 계정은 이 사이트에서 사용하지 않습니다. 지도 길찾기는 이용할 수 있습니다.':'시간표 서버 연결을 준비 중입니다. 지도 길찾기는 이용할 수 있습니다.'}</p> : authLoading ? <p>로그인 확인 중…</p> : !user ? <>
         <div className="auth-tabs" role="group" aria-label="계정 이용"><button type="button" disabled={busy} aria-pressed={authMode==='login'} onClick={()=>{setAuthMode('login');setStatus('');}}>로그인</button><button type="button" disabled={busy} aria-pressed={authMode==='signup'} onClick={()=>{setAuthMode('signup');setStatus('');}}>회원가입</button></div>
         <p className="muted">{authMode==='signup'?'아이디와 비밀번호로 가입하면 바로 나만의 시간표를 관리할 수 있습니다.':'로그인하면 저장한 수업과 장소를 불러옵니다.'}</p>
         <form key={authMode} onSubmit={authMode==='signup'?signup:login} className="schedule-form"><fieldset disabled={busy}><label>{authMode==='signup'?'아이디':'아이디 또는 기존 이메일'}<input name="identifier" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={authMode==='signup'?24:254} required /></label><label>비밀번호<input name="password" type="password" autoComplete={authMode==='signup'?'new-password':'current-password'} minLength={authMode==='signup'?8:undefined} aria-describedby={authMode==='signup'?'signup-password-help':undefined} required /></label>{authMode==='signup'&&<><p id="signup-password-help" className="auth-help">아이디: 영문·숫자·_·- 3~24자 · 비밀번호: 8자 이상</p><label>비밀번호 확인<input name="confirmation" type="password" autoComplete="new-password" minLength={8} required /></label></>}<button className="accent" disabled={busy}>{busy?'처리 중…':authMode==='signup'?'회원가입':'로그인'}</button></fieldset></form>

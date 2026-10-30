@@ -9,7 +9,7 @@ const campusDining = [
 let campusFacilities=[...campusDining],campusPins=[],campusFilter='all',campusSearchGeneration=0,campusSelectedPin=null;
 const campusCategoryNames={meal:'학식당',FD6:'식당',CE7:'카페',CS2:'편의점'},campusIcons={meal:'♧',FD6:'♧',CE7:'☕',CS2:'▣'};
 let facilityScope='inside',facilityCategory='all',outsideFacilities=[],facilityLoadGeneration=0,schoolTab=null,facilityNote='';
-function leaveSchoolFacilities(){if(!schoolTab)return;schoolTab=null;document.body.classList.remove('outside-facilities');facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());}
+function leaveSchoolFacilities(){if(!schoolTab)return;campusPinRows=[];schoolTab=null;document.body.classList.remove('outside-facilities');facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());}
 function renderSchoolFacilities(){
   const rows=(facilityScope==='inside'?campusFacilities:outsideFacilities).filter(row=>facilityCategory==='all'||row.category===facilityCategory),box=$('schoolFacilityResults');box.replaceChildren();
   document.querySelectorAll('[data-school-category]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.schoolCategory===facilityCategory)));
@@ -31,7 +31,7 @@ async function querySchoolArea(){
 }
 async function showShellTab(tab){
  $('campusPlaceCard').hidden=true;$('campusSearchResults').hidden=true;campusSelectedPin?.remove();
- if(!['inside','outside'].includes(tab)){schoolTab=null;document.body.classList.remove('outside-facilities');facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());document.body.classList.remove('school-sheet','sheet-collapsed','resizable-sheet','sheet-minimized');if(tab==='map'){document.body.classList.remove('panel-open');map.refresh?.();}else if(tab==='route-nearby')showPurpose('nearby');return;}
+ if(!['inside','outside'].includes(tab)){campusPinRows=[];schoolTab=null;document.body.classList.remove('outside-facilities');facilityLoadGeneration++;campusPins.splice(0).forEach(p=>p.remove());document.body.classList.remove('school-sheet','sheet-collapsed','resizable-sheet','sheet-minimized');if(tab==='map'){document.body.classList.remove('panel-open');map.refresh?.();}else if(tab==='route-nearby')showPurpose('nearby');return;}
  document.body.classList.toggle('outside-facilities',tab==='outside');
  const entering=schoolTab!==tab;schoolTab=tab;facilityScope=tab;
  if(entering){facilityCategory='all';facilityNote='';document.body.classList.remove('sheet-collapsed');$('schoolSheetHandle').setAttribute('aria-expanded','true');$('schoolSheetHandle').setAttribute('aria-label','학교 패널 접기');facilityLoadGeneration++;if(typeof facilityLayers!=='undefined')facilityLayers.splice(0).forEach(p=>p.remove());}
@@ -48,6 +48,7 @@ function campusDestination(place,kind='end') {
 }
 function campusMealPlace(name) {return campusDining.find(p=>p.building===mealLocationQuery(name));}
 function openCampusPlace(place) {
+  if(place.category==='building'&&typeof openCampusBuilding==='function'){openCampusBuilding(place);return;}
   const box=$('campusPlaceCard');box.replaceChildren();box.hidden=false;map.panTo(place.coords);
   campusSelectedPin?.remove();const selected=textNode('div',place.name,'selected-campus-pin');campusSelectedPin=map.marker(place.coords,selected);
   const close=textNode('button','×','place-close');close.type='button';close.setAttribute('aria-label','장소 정보 닫기');close.onclick=()=>{box.hidden=true;campusSelectedPin?.remove();};
@@ -57,24 +58,29 @@ function openCampusPlace(place) {
   if(place.category==='meal'){const button=textNode('button','오늘 식단 보기','secondary');button.onclick=()=>{showPurpose('meals');$('loadMeals').click();box.hidden=true;};actions.append(button);}
   box.append(actions);
 }
+let campusPinRows=null;
 function renderCampusPins(rows) {
   campusPins.splice(0).forEach(p=>p.remove());
-  for(const place of rows||campusFacilities.filter(p=>campusFilter==='all'||p.category===campusFilter)){
+  campusPinRows=rows||campusFacilities.filter(p=>campusFilter==='all'||p.category===campusFilter);
+  const groups=typeof CampusRegistry!=='undefined'&&map.project?CampusRegistry.cluster(campusPinRows,map.project):campusPinRows.map(row=>({rows:[row]}));
+  for(const group of groups){const place=group.rows[0];
     const button=textNode('button','','campus-pin pin-'+place.category);button.type='button';button.setAttribute('aria-label',`${place.name} · ${campusCategoryNames[place.category]}`);
     button.append(textNode('span',campusIcons[place.category],'pin-icon'),textNode('span',place.name,'pin-name'));
-    button.onclick=event=>{event.stopPropagation();openCampusPlace(place);};
+    if(group.rows.length>1){button.classList.add('cluster-pin');button.append(textNode('b',String(group.rows.length),'cluster-count'));button.setAttribute('aria-label',`${campusCategoryNames[place.category]||'시설'} ${group.rows.length}곳 모아보기`);}
+    button.onclick=event=>{event.stopPropagation();if(group.rows.length>1&&typeof openFacilityCluster==='function')openFacilityCluster(group.rows);else openCampusPlace(place);};
     campusPins.push(map.marker(place.coords,button));
   }
 }
 async function loadCampusFacilities() {
   if(!map.campusPlaces){$('campusPlacesStatus').textContent='학식당 위치 표시 · 카카오 연결 후 카페·편의점을 조회할 수 있습니다.';return;}
   const results=await Promise.allSettled(['FD6','CE7','CS2'].map(category=>map.campusPlaces(category)));
-  campusFacilities=[...campusDining,...results.flatMap(r=>r.status==='fulfilled'?r.value:[])];if(!schoolTab)renderCampusPins();
+  campusFacilities=[...campusDining,...results.flatMap(r=>r.status==='fulfilled'?r.value:[]),...(typeof campusCatalog!=='undefined'&&campusCatalog?CampusRegistry.published(campusCatalog).filter(row=>row.category!=='building'):[])];if(!schoolTab)renderCampusPins();
   if(schoolTab==='inside')renderSchoolFacilities();
   $('campusPlacesStatus').replaceChildren(textNode('span',`학식당 ${campusDining.length}곳 · 카페 ${campusFacilities.filter(p=>p.category==='CE7').length}곳 · 편의점 ${campusFacilities.filter(p=>p.category==='CS2').length}곳`));
   if(results.some(r=>r.status==='rejected')){const retry=textNode('button','일부 시설 조회 실패 · 다시 시도');retry.onclick=loadCampusFacilities;$('campusPlacesStatus').append(retry);}
 }
 function initCampusExplorer() {
+  if(typeof initLocalFacilities==='function')initLocalFacilities();
   if(new URLSearchParams(location.search).get('shell')==='1')document.body.classList.add('shell-embedded');
   document.querySelectorAll('[data-school-category]').forEach(button=>button.onclick=()=>{facilityCategory=button.dataset.schoolCategory;renderSchoolFacilities();});
   initSchoolSheet();$('refreshSchoolFacilities').onclick=querySchoolArea;
