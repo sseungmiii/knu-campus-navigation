@@ -68,10 +68,10 @@ function renderCampusPins(rows) {
   campusPins.splice(0).forEach(p=>p.remove());
   campusPinRows=rows||campusFacilities.filter(p=>campusFilter==='all'||p.category===campusFilter);
   const groups=typeof CampusRegistry!=='undefined'&&map.project?CampusRegistry.cluster(campusPinRows,map.project):campusPinRows.map(row=>({rows:[row]}));
-  for(const group of groups){const place=group.rows[0];
+  for(const group of groups){const place=group.rows[0],mixed=new Set(group.rows.map(row=>row.category)).size>1;
     const button=textNode('button','','campus-pin pin-'+place.category);button.type='button';button.setAttribute('aria-label',`${place.name} · ${campusCategoryNames[place.category]}`);
-    button.append(textNode('span',campusIcons[place.category],'pin-icon'),textNode('span',place.name,'pin-name'));
-    if(group.rows.length>1){button.classList.add('cluster-pin');button.append(textNode('b',String(group.rows.length),'cluster-count'));button.setAttribute('aria-label',`${campusCategoryNames[place.category]||'시설'} ${group.rows.length}곳 모아보기`);}
+    button.append(textNode('span',mixed?'⌘':campusIcons[place.category],'pin-icon'),textNode('span',mixed?'시설 모아보기':place.name,'pin-name'));
+    if(group.rows.length>1){button.classList.add('cluster-pin');button.append(textNode('b',String(group.rows.length),'cluster-count'));button.setAttribute('aria-label',`${mixed?'시설':campusCategoryNames[place.category]||'시설'} ${group.rows.length}곳 모아보기`);}
     button.onclick=event=>{event.stopPropagation();if(group.rows.length>1&&typeof openFacilityCluster==='function')openFacilityCluster(group.rows);else openCampusPlace(place);};
     campusPins.push(map.marker(place.coords,button));
   }
