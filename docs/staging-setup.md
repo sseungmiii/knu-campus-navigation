@@ -13,7 +13,11 @@
 
 ## Vercel 연결 절차
 
-Vercel 팀 접근 승인이 있어야 실행 가능하다. 팀 접근 오류를 우회해 다른 팀이나 계정에 프로젝트를 생성하지 않는다.
+2026-10-30 연결 완료: `seungmiii` 팀의 별도 프로젝트 `knu-campus-navigation-test` (`prj_BV2a5xKHBUwVOzLOC81zHGppGETj`). 기준 브랜치는 `staging`, Node 24이며 staging 이외 브랜치는 빌드를 건너뛴다. Git 연동으로 staging push 시 자동 배포한다. 고정 주소는 `https://knu-campus-navigation-test.vercel.app`이다. `KNU_ENV=staging`과 해당 주소의 정확한 허용 출처를 모든 환경에 설정했다.
+
+운영 프로젝트·main·운영 DB·인증 설정은 변경하지 않았다. 운영 프로젝트에서도 staging의 Preview가 자동 생성되지만 운영 고정 주소로 승격하지 않는다. 이번 테스트 프로젝트에는 Supabase 및 외부 REST 비밀키를 복제하지 않았으며, 독립 테스트 DB 연결 전까지 로그인/시간표 저장은 비활성화된다. 카카오 테스트 도메인 허용 설정과 외부 경로 API 검증은 별도로 남아 있다.
+
+아래는 재설정/후속 준비 절차다.
 
 1. 같은 Git 저장소에 별도 `knu-campus-navigation-test` 프로젝트를 생성하고 **그 프로젝트만** `staging`을 배포 기준으로 지정한다. 기존 운영 프로젝트 설정은 변경하지 않는다.
 2. 테스트 프로젝트의 Production/Preview 환경에 `KNU_ENV=staging`을 넣는다. 이 프로젝트의 Production은 테스트 고정 주소를 뜻하며 운영 데이터 사용을 의미하지 않는다.
